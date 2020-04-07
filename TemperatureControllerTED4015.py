@@ -11,7 +11,7 @@ def get_resource_list():
 class TED4015():
     """
     Class for controlling the TED4015 instrument.
-    Initiates the instrument to upon creation. Use with care since error handling is 
+    Initiates the instrument to upon creation. Use with care since error handling is
     essentially not present
     """
     def __init__(self,index=0):
@@ -60,3 +60,8 @@ class TED4015():
         Returns the instananeous power consumption of the intrument
         """
         return float(self.TED4015.query('MEAS:SCAL:POW?'))
+    def close_device(self):
+        """
+        Closes the communication to the device
+        """
+        return self.TED4015.close()

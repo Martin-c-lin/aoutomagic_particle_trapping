@@ -1,2 +1,6 @@
 *.avi
 *.dll
+test*
+yacctab.py
+lextab.py
+__pycache__
