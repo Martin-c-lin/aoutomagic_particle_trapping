@@ -1,6 +1,10 @@
 from ctypes import *
 import clr,sys
 from System import Decimal,Int32
+from time import sleep
+"""
+Note when usin this code on other computer than the one in the biophysics lab these paths may need changing.
+"""
 clr.AddReference('C:/Program Files/Thorlabs/Kinesis/Thorlabs.MotionControl.DeviceManagerCLI.dll')
 clr.AddReference('C:/Program Files/Thorlabs/Kinesis/Thorlabs.MotionControl.GenericMotorCLI.dll')
 clr.AddReference('C:/Program Files/Thorlabs/Kinesis/Thorlabs.MotionControl.KCube.DCServoCLI.dll')
@@ -14,7 +18,7 @@ DeviceManagerCLI.BuildDeviceList()
 DeviceManagerCLI.GetDeviceListSize()
 
 # Relevant parameters
-mmToPixel = 10000 # 1 mm = 10 000 pixels
+mmToPixel = 10000/0.6 # 1 mm = 10 000 pixels for 60x objective
 timeoutVal = 30000
 
 def InitateMotor(serialNumber,pollingRate=250):
@@ -22,7 +26,16 @@ def InitateMotor(serialNumber,pollingRate=250):
     DeviceManagerCLI.GetDeviceListSize()
 
     motor = KCubeDCServo.CreateKCubeDCServo(serialNumber)
-    motor.Connect(serialNumber)
+    for attempts in range(3):
+        try:
+            motor.Connect(serialNumber)
+        except:
+            print("Connection attempt",attempts,"failed")
+            if(attempts<2):
+                print("Will wait 5 seconds and try again")
+                sleep(5)
+            else:
+                print("Cannot connect to device.\n Please ensure that the device is connected to your computer and not in use in any other program!")
     motor.WaitForSettingsInitialized(5000)
     # configure the stage
     motorSettings = motor.LoadMotorConfiguration(serialNumber)
@@ -47,16 +60,23 @@ def MoveMotor(motor,distance):
         print("Trying to move too far")
         return False
     motor.SetJogStepSize(Decimal(float(distance))) # For unknown reason python thinks one first must convert to float but only when running from console...
-    motor.MoveJog(1,timeoutVal)# Jog in forward direction
+    try:
+        motor.MoveJog(1,timeoutVal)# Jog in forward direction
+    except:
+        print( "Trying to move motor to NOK position")
+        return False
     return True
 def MoveMotorToPixel(motor,targetPixel,currentPixel,maxPixel=1280):
     if(targetPixel<0 or targetPixel>maxPixel): # Fix correct boundries
         print("Target pixel outside of bounds")
         return False
     dx = (targetPixel-currentPixel)/mmToPixel
-    print(Decimal(float(dx)))
     motor.SetJogStepSize(Decimal(float(dx))) # For unknown reason python thinks one first must convert to float but only when running from console...
-    motor.MoveJog(1,timeoutVal)# Jog in forward direction
+    try:
+        motor.MoveJog(1,timeoutVal)# Jog in forward direction
+    except:
+        print( "Trying to move motor to NOK position")
+        return False
     return True
 
 def MoveTrapToPosition(motorX,motorY,targetX,targetY,trapX,trapY):
@@ -66,46 +86,3 @@ def MoveTrapToPosition(motorX,motorY,targetX,targetY,trapX,trapY):
     x=MoveMotorToPixel(motorX,targetX,trapX) # move X
     y=MoveMotorToPixel(motorY,targetY,trapY) # move Y
     return x and y
-
-# print("Forwards = ",MotorDirection.Forward)
-# print("Backwards = ",MotorDirection.Backward)
-"""
-
-serialNumX='27502438'
-serialNumY='27502419'
-pollingRate=50
-timeout_val=60000
-
-
-motor = InitateMotor(serialNumX,pollingRate=pollingRate)
-
-print(motor.Position)
-targetPosX = Decimal(0.01)
-timeoutVal = 10000
-motor.MoveTo(targetPosX, timeoutVal)
-
-DisconnectMotor(motor)
-
-"""
-
-
-
-
-# motor = KCubeDCServo.CreateKCubeDCServo(serialNumX)
-# motor.Connect(serialNumX)
-# motor.WaitForSettingsInitialized(5000)
-#
-# # configure the stage
-# motorSettings = motor.LoadMotorConfiguration(serialNumX)
-# motorSettings.DeviceSettingsName = 'Z812'
-#
-# # update the RealToDeviceUnit converter
-# motorSettings.UpdateCurrentConfiguration()
-#
-# # push the settings down to the device
-# MotorDeviceSettings = motor.MotorDeviceSettings
-# motor.SetSettings(MotorDeviceSettings, True, False)
-# # Start polling the device
-# motor.StartPolling(pollingRate)
-#
-# motor.EnableDevice() # IS this needed?

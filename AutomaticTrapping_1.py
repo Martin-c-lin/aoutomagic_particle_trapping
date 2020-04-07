@@ -139,16 +139,19 @@ def set_AOI(left,right,top,bottom):
     movement_threshold = 5
 
     motor_locks.release()
-def is_trapped():
+def is_trapped(threshold_distance=50):
     """
     Function for detemining if a particle has been trapped or not
     """
-    return true
+    global center
+    global trap_1_relative
+    distance = np.sqrt((center[0]-trap_1_relative[0])**2 + (center[1]-trap_1_relative[1])**2)
+    return distance<threshold_distance
 
 ############### Main script starts here ####################################
 # Serual numbers for motors
-serial_num_X='27502438'
-serial_num_Y='27502419'
+serial_num_X = '27502438'
+serial_num_Y = '27502419'
 polling_rate = 100 # How often to speak to the motor(ms)
 
 # Initate contact with motors
@@ -173,7 +176,7 @@ continue_capture = True
 motor_running = True
 record = True # Default
 
-nbr_frames = 5000
+nbr_frames = 200
 trap_1_absolute = [520,580]# Position of trap in absolute terms
 trap_1_relative = [trap_1_absolute[0],trap_1_absolute[1]] # position of trap when image si cropped
 

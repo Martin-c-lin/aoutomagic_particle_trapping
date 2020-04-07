@@ -7,11 +7,43 @@ import matplotlib.pyplot as plt
 import numpy as np
 from keras.models import load_model
 import threading,time,cv2,queue,copy,sys
+import tkinter
+from tkinter import messagebox
 
 
-new_AOI_camera = False
-new_AOI_display = False
+def terminate_threads():
+    """
+    Function for killing all the threads
+    """
+    global continue_capture
+    global motor_running
 
+    continue_capture = False # All threds exits their main loop once this parameter is changed
+    motor_running = False
+    messagebox.showinfo("Terminating threads")
+    print("Terminating threads \n")
+    time.sleep(3)
+    global thread_list
+    for thread in thread_list:
+        thread.join()
+def start_threads():
+    camera_thread = CameraThread(1, "Thread-camera")
+    motor_X_thread = MotorThread(2,"Thread-motorX",motor_X,0) # Last argument is to indicate that it is the x-motor and not the y
+    motor_Y_thread = MotorThread(3,"Thread-motorY",motor_Y,1)
+    display_thread = DisplayThread(4,"Thread-display")
+    tracking_thread = TrackingThread(5,"Tracker_thread")
+    camera_thread.start()
+    motor_X_thread.start()
+    motor_Y_thread.start()
+    display_thread.start()
+    tracking_thread.start()
+    print("Camera,display, motor_X and motor_Y threads created")
+    global thread_list
+    thread_list.append(camera_thread)
+    thread_list.append(motor_X_thread)
+    thread_list.append(motor_Y_thread)
+    thread_list.append(display_thread)
+    thread_list.append(tracking_thread)
 class DisplayThread(threading.Thread):
     """
     Thread class for plotting the result in the BG.
@@ -67,7 +99,6 @@ class MotorThread(threading.Thread):
        print("Running motor thread")
        global motor_running
        while motor_running:
-
            # Acquire lock to ensure that it is safe to move the motor
            motor_locks[self.axis].acquire()
            # Move motor to specified position
@@ -129,20 +160,41 @@ class CameraThread(threading.Thread):
            end = time.time()
            cam.stop_live_video()
            print("Capture sequence finished",image_count, "Images captured in ",end-start,"seconds. \n FPS is ",image_count/(end-start))
-class inputThread(threading.Thread):
-    # Thread which handles input from the console
+class TrackingThread(threading.Thread):
+   """
+   Thread which does the tracking
+   """
    def __init__(self, threadID, name):
-      threading.Thread.__init__(self)
-      self.threadID = threadID
-      self.name = name
-      self.setDaemon(True)
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self.setDaemon(True)
    def run(self):
-       global inputQueue
-       global input_thread_alive
-       while (input_thread_alive):
-            input_str = input()
-            inputQueue.put(input_str)
-            time.sleep(0.1)
+       global camera_lock
+       global center
+       global image
+       global zoomed_in
+       network1 = load_model(network_path+'network1.h5')
+       network2 = load_model(network_path+'network_101x101_2.h5')
+       i = 0
+       while continue_capture:
+
+           if i<100:
+               camera_lock.acquire() # Might not need the lock
+               center[0],center[1],picture = fpt.find_single_particle_center(copy.copy(image),threshold = 150) # Do we need a copy of this or move it to another thread?s
+               camera_lock.release()
+
+           if i>=100 and not zoomed_in and is_trapped(): # Change to a proper lock-on check
+               zoomed_in =  True
+               half_image_width = 50
+               movement_threshold = 10
+               set_AOI(half_image_width=half_image_width)
+               #record = False
+           if i>100 and zoomed_in:
+               predict_particle_position(network2,print_position=False)
+
+           time.sleep(0.1) # Needed to prevent this thread from running too fast
+           i+=1
 def set_AOI(half_image_width=50):
     """
     Function for changing the Area Of Interest for the camera to the box specified by
@@ -209,16 +261,18 @@ def is_trapped(threshold_distance=50):
     global trap_1_relative
     distance = np.sqrt((center[0]-trap_1_relative[0])**2 + (center[1]-trap_1_relative[1])**2)
     return distance<threshold_distance
+
 ############### Main script starts here ####################################
+
 # Serual numbers for motors
 serial_num_X = '27502438'
 serial_num_Y = '27502419'
 network_path = 'C:/Martin/Networks/'
 inputQueue = queue.Queue()
-EXIT_COMMAND = "q"
 polling_rate = 100 # How often to speak to the motor(ms)
 
 # Initate contact with motors
+#TODO move these to the thread
 motor_X = TM.InitateMotor(serial_num_X,pollingRate=polling_rate)
 motor_Y = TM.InitateMotor(serial_num_Y,pollingRate=polling_rate)
 
@@ -240,9 +294,8 @@ continue_capture = True # True if camera and dispaly should keep updating
 motor_running = True # Should the motor thread keep running?
 zoomed_in = False # Keeps track of whether the image is cropped or not
 record = False # Default
-input_thread_alive = True
-
-nbr_frames = 300
+new_AOI_camera = False
+new_AOI_display = False
 movement_threshold = 40
 
 trap_1_absolute = [520,580]# Position of trap relative to (0,0) of full camera frame
@@ -251,64 +304,31 @@ trap_1_relative = [trap_1_absolute[0],trap_1_absolute[1]] # position of trap whe
 
 center = [400,400]
 center[0],center[1],picture = fpt.find_single_particle_center(copy.copy(image),threshold = 150) # Do we need a copy of this or move it to another thread?s
+center[0],center[1] = trap_1_relative[0],trap_1_relative[1] # Do not want it wandering on its own
 
 camera_lock = threading.Lock()
 motor_locks = [threading.Lock(),threading.Lock()]
 
-# Create and start all the necessary threads
-camera_thread = CameraThread(1, "Thread-camera")
-motor_X_thread = MotorThread(2,"Thread-motorX",motor_X,0) # Last argument is to indicate that it is the x-motor and not the y
-motor_Y_thread = MotorThread(3,"Thread-motorY",motor_Y,1)
-display_thread = DisplayThread(4,"Thread-display")
-input_thread = inputThread(5,'Input-thread')
-camera_thread.start()
-motor_X_thread.start()
-motor_Y_thread.start()
-display_thread.start()
-input_thread.start()
-# Load the deep-learning network
-network1 = load_model(network_path+'network1.h5')
-network2 = load_model(network_path+'network_101x101_2.h5')
+# Create a empty list to put the threads in
+thread_list = []
 
-for i in range(nbr_frames):
-    if inputQueue.qsize()>0:
-        input_str = inputQueue.get()
-        print("Message recieved: ",input_str)
-        if input_str==EXIT_COMMAND:
-            print("Aborting program")
-            continue_capture = False # All threds exits their main loop once this parameter is changed
-            motor_running = False
-            input_thread_alive = False
-            break
-    if i<100:
-        camera_lock.acquire() # Might not need the lock
-        center[0],center[1],picture = fpt.find_single_particle_center(copy.copy(image),threshold = 150) # Do we need a copy of this or move it to another thread?s
-        camera_lock.release()
-        #print(center)
-
-    if i>=100 and not zoomed_in and is_trapped(): # Change to a proper lock-on check
-        zoomed_in =  True
-        half_image_width = 50
-        movement_threshold = 10
-        set_AOI(half_image_width=half_image_width)
-        #record = False
-    if i>100 and zoomed_in:
-        predict_particle_position(network2,print_position=False)
-
-    time.sleep(0.1) # Needed to prevent this thread from running too fast
+# Create some buttons for basic control
+top = tkinter.Tk()
+B = tkinter.Button(top, text ="Exit program", command = terminate_threads)
+B2 = tkinter.Button(top, text ="Start program", command = start_threads)
+# TODO add buttons for left right up and down movement as well as zoom in
+B.pack()
+B2.pack()
+top.mainloop()
 
 # Close the threads and the camera
 continue_capture = False # All threds exits their main loop once this parameter is changed
 motor_running = False
-input_thread_alive = False
-camera_thread.join()
-motor_X_thread.join()
-motor_Y_thread.join()
-display_thread.join()
-input_thread.join()
+
 # Shut down camera and motors safely
 cam.close()
 
 TM.DisconnectMotor(motor_X)
 TM.DisconnectMotor(motor_Y)
+print(thread_list)
 sys.exit()
