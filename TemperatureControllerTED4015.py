@@ -1,6 +1,7 @@
 # Control of the temperature controller
 
 import pyvisa
+from time import sleep
 def get_resource_list():
     """
     Returns a list of available pyvisa resources
@@ -65,3 +66,36 @@ class TED4015():
         Closes the communication to the device
         """
         return self.TED4015.close()
+    def query_min_current(self):
+        """
+        Check minimum current(in Amps) setting on the temperature controller
+        """
+        return float(self.TED4015.query('SOURce:CURRent? MINimum'))
+
+    def query_max_current(self):
+        """
+        Check maximum current(in Amps) setting on the temperature controller
+        """
+        return float(self.TED4015.query('SOURce:CURRent? MAXimum'))
+    def set_max_current(self,current):
+        """
+        Sets the maximum output current of the device
+        """
+        self.TED4015.write('OUTP OFF')
+        sleep(1) # Wait for the output to be turned off
+        command = 'SOUR:CURR:LIM '+str(current)
+        self.TED4015.write(command)
+        self.TED4015.write('OUTP ON')
+        return self.query_max_current()
+    def set_gain(self,gain):
+        """
+        Function for setting the gain of the PID controller (P in PID).
+        Default should be around 50-60 in our case as a reference
+        """
+        command ='SOURce:TEMPerature:LCONstants:GAIN '+str(gain)
+        return self.TED4015.write(command)
+    def query_gain(self):
+        """
+        Function for reading the gain of the PID controller (P in PID).
+        """
+        return float(self.TED4015.query('SOURce:TEMPerature:LCONstants:GAIN?'))
