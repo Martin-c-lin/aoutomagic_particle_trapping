@@ -18,7 +18,9 @@ DeviceManagerCLI.BuildDeviceList()
 DeviceManagerCLI.GetDeviceListSize()
 
 # Relevant parameters
-mmToPixel = 10000/0.6 # 1 mm = 10 000 pixels for 60x objective
+# mmToPixel = 10000/0.6 # 1 mm = 10 000 pixels for 60x objective # Double check the value
+
+# TODO change this to a class?
 timeoutVal = 30000
 
 def InitateMotor(serialNumber,pollingRate=250):
@@ -66,7 +68,7 @@ def MoveMotor(motor,distance):
         print( "Trying to move motor to NOK position")
         return False
     return True
-def MoveMotorToPixel(motor,targetPixel,currentPixel,maxPixel=1280):
+def MoveMotorToPixel(motor,targetPixel,currentPixel,maxPixel=1280,mmToPixel=16666): # Double check mm to pixel value
     if(targetPixel<0 or targetPixel>maxPixel): # Fix correct boundries
         print("Target pixel outside of bounds")
         return False
@@ -86,3 +88,8 @@ def MoveTrapToPosition(motorX,motorY,targetX,targetY,trapX,trapY):
     x=MoveMotorToPixel(motorX,targetX,trapX) # move X
     y=MoveMotorToPixel(motorY,targetY,trapY) # move Y
     return x and y
+def setJogSpeed(motor,jog_speed,jog_acc=0.01):
+    """
+    Sets the jog-speed in mm/s of the motor as well as the jog acceleration
+    """
+    return motor.SetJogVelocityParams(Decimal(jog_speed),Decimal(jog_acc))

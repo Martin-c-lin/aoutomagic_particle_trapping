@@ -10,7 +10,6 @@ import threading,time,cv2,queue,copy,sys
 import tkinter
 from tkinter import messagebox
 
-
 def terminate_threads():
     """
     Function for killing all the threads
@@ -110,17 +109,16 @@ class MotorThread(threading.Thread):
            time.sleep(0.05) # To give other threads some time to work
        return
 class CameraThread(threading.Thread):
-    # Add camera to init method here?
-   def __init__(self, threadID, name):
+   def __init__(self, threadID, name,batch_size=100):
       threading.Thread.__init__(self)
       self.threadID = threadID
       self.name = name
+      self.batch_size = batch_size
       self.setDaemon(True)
    def run(self):
 
        print("Initiating threaded capture sequence")
        image_count = 0
-       batch_size = 100 # Pretty good size for high performance
        number_images_saved = 0 # counts
 
        while continue_capture:
@@ -138,10 +136,10 @@ class CameraThread(threading.Thread):
            start = time.time()
 
            # Create an array to store the images which have been captured in
-           saved_images = np.zeros([batch_size,np.abs(AOI[0]-AOI[1]),np.abs(AOI[3]-AOI[2])])
+           saved_images = np.zeros([self.batch_size ,np.abs(AOI[0]-AOI[1]),np.abs(AOI[3]-AOI[2])])
 
+           # Start continously capturin images now that the camera parameters have been set
            while continue_capture and not new_AOI_camera:
-
                cam.wait_for_frame(timeout=None)
 
                # Capture an image and update the image count
@@ -152,10 +150,10 @@ class CameraThread(threading.Thread):
 
                if record:
                    # TODO Create option for recording video instead of simple images
-                   saved_images[number_images_saved%batch_size] = copy.copy(image) # Do not want a reference but a copy of its own
+                   saved_images[number_images_saved%self.batch_size ] = copy.copy(image) # Do not want a reference but a copy of its own
                    number_images_saved+=1
-                   if number_images_saved%batch_size==0 and number_images_saved>1:
-                       np.save("test_images/frames"+str(number_images_saved-batch_size)+"_"+str(number_images_saved),np.uint8(saved_images))
+                   if number_images_saved%self.batch_size ==0 and number_images_saved>1:
+                       np.save("test_images/frames"+str(number_images_saved-self.batch_size )+"_"+str(number_images_saved),np.uint8(saved_images))
            # Close the livefeed and calculate the fps of the captures
            end = time.time()
            cam.stop_live_video()
@@ -261,7 +259,53 @@ def is_trapped(threshold_distance=50):
     global trap_1_relative
     distance = np.sqrt((center[0]-trap_1_relative[0])**2 + (center[1]-trap_1_relative[1])**2)
     return distance<threshold_distance
-
+def move_button(move_direction):
+    """
+    Button function for manually moving the motors a bit
+    move_direction = 0 => move up
+    move_direction = 1 => move down
+    move_direction = 2 => move right
+    move_direction = 3 => move left
+    """
+    move_dist = 0.05 # Quite arbitrary movemement amount
+    global motor_locks
+    if zoomed_in:
+        move_dist = 0.02
+    if move_direction==0:
+        # Move up
+        global motor_Y
+        motor_locks[1].acquire()
+        TM.MoveMotor(motor_Y,move_dist)
+        motor_locks[1].release()
+    else if move_direction==1:
+        # Move down
+        global motor_Y
+        motor_locks[1].acquire()
+        TM.MoveMotor(motor_Y,-move_dist)
+        motor_locks[1].release()
+    else if move_direction?==2:
+        # Move right
+        global motor_X
+        motor_locks[0].acquire()
+        TM.MoveMotor(motor_X,move_dist)
+        motor_locks[0].release()
+    else if move_direction?==3:
+        # Move left
+        global motor_X
+        motor_locks[0].acquire()
+        TM.MoveMotor(motor_X,-move_dist)
+        motor_locks[0].release()
+    else:
+        print("Invalid move direction")
+def start_record_button():
+    """
+    Button function for starting of recording
+    """
+    global record
+    record = True
+def stop_record_button():
+    global record
+    record = False
 ############### Main script starts here ####################################
 
 # Serual numbers for motors
@@ -288,7 +332,6 @@ print("Exposure time = ",exposure_time)
 image = cam.grab_image()
 
 # Set parameters for the various threads
-
 # TODO replace this with a dictionary perhaps
 continue_capture = True # True if camera and dispaly should keep updating
 motor_running = True # Should the motor thread keep running?
