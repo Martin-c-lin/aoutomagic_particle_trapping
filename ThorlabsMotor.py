@@ -68,11 +68,11 @@ def MoveMotor(motor,distance):
         print( "Trying to move motor to NOK position")
         return False
     return True
-def MoveMotorToPixel(motor,targetPixel,currentPixel,maxPixel=1280,mmToPixel=16666): # Double check mm to pixel value
+def MoveMotorToPixel(motor,targetPixel,currentPixel,maxPixel=1280,mmToPixel=16140): # Double check mm to pixel value empirically measured
     if(targetPixel<0 or targetPixel>maxPixel): # Fix correct boundries
         print("Target pixel outside of bounds")
         return False
-    dx = (targetPixel-currentPixel)/mmToPixel
+    dx = -(targetPixel-currentPixel)/mmToPixel # For some reason there should be a minus here, suspec this is due to changes in the setup
     motor.SetJogStepSize(Decimal(float(dx))) # For unknown reason python thinks one first must convert to float but only when running from console...
     try:
         motor.MoveJog(1,timeoutVal)# Jog in forward direction
