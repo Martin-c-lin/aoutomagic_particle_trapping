@@ -9,6 +9,7 @@ from keras.models import load_model
 import threading,time,cv2,queue,copy,sys
 import tkinter
 from tkinter import messagebox
+from functools import partial
 
 def terminate_threads():
     """
@@ -357,11 +358,19 @@ thread_list = []
 
 # Create some buttons for basic control
 top = tkinter.Tk()
-B = tkinter.Button(top, text ="Exit program", command = terminate_threads)
-B2 = tkinter.Button(top, text ="Start program", command = start_threads)
-# TODO add buttons for left right up and down movement as well as zoom in
-B.pack()
-B2.pack()
+exit_button = tkinter.Button(top, text ="Exit program", command = terminate_threads)
+start_button = tkinter.Button(top, text ="Start program", command = start_threads)
+up_button = tkinter.Button(top, text ="Move up", command = partial(move_button,0))
+down_button = tkinter.Button(top, text ="Move down", command = partial(move_button,1))
+right_button = tkinter.Button(top, text ="Move right", command = partial(move_button,2))
+left_buton = tkinter.Button(top, text ="Move left", command = partial(move_button,3))
+# TODO add button for zoom in
+exit_button.pack()
+start_button.pack()
+up_button.pack()
+down_button.pack()
+right_button.pack()
+left_button.pack()
 top.mainloop()
 
 # Close the threads and the camera
