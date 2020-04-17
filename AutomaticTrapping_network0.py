@@ -121,7 +121,8 @@ class CameraThread(threading.Thread):
        print("Initiating threaded capture sequence")
        image_count = 0
        number_images_saved = 0 # counts
-
+       global record
+       # TODO - set framreate so we have a proper framerate in the videos!
        while continue_capture:
            # Set defaults for camera, aknowledge that this has been done
            cam.set_defaults(left=AOI[0],right=AOI[1],top=AOI[2],bot=AOI[3])
@@ -133,7 +134,7 @@ class CameraThread(threading.Thread):
            image = cam.grab_image(n_frames=1)
 
            # Start livefeed from the camera
-           cam.start_live_video() # Maximum framerate
+           cam.start_live_video() # Maximum framerate, shoul probably cap it
            start = time.time()
 
            # Create an array to store the images which have been captured in
@@ -153,7 +154,7 @@ class CameraThread(threading.Thread):
                    # TODO Create option for recording video instead of simple images
                    saved_images[number_images_saved%self.batch_size ] = copy.copy(image) # Do not want a reference but a copy of its own
                    number_images_saved+=1
-                   if number_images_saved%self.batch_size ==0 and number_images_saved>1:
+                   if number_images_saved%self.batch_size ==0 and number_images_saved>=1:
                        np.save("test_images/frames"+str(number_images_saved-self.batch_size )+"_"+str(number_images_saved),np.uint8(saved_images))
            # Close the livefeed and calculate the fps of the captures
            end = time.time()
@@ -177,19 +178,18 @@ class TrackingThread(threading.Thread):
        network2 = load_model(network_path+'network_101x101_2.h5')
        i = 0
        while continue_capture:
-
-           if i<100:
-               camera_lock.acquire() # Might not need the lock
+           #if i<100:
+           if not zoomed_in:
+               # camera_lock.acquire() # Might not need the lock
                center[0],center[1],picture = fpt.find_single_particle_center(copy.copy(image),threshold = 150) # Do we need a copy of this or move it to another thread?s
-               camera_lock.release()
+               # camera_lock.release()
 
-           if i>=100 and not zoomed_in and is_trapped(): # Change to a proper lock-on check
+           if not zoomed_in and is_trapped(): # Change to a proper lock-on check
                zoomed_in =  True
                half_image_width = 50
                movement_threshold = 10
                set_AOI(half_image_width=half_image_width)
-               #record = False
-           if i>100 and zoomed_in:
+           if zoomed_in and is_trapped():
                predict_particle_position(network2,print_position=False)
 
            time.sleep(0.1) # Needed to prevent this thread from running too fast
@@ -270,43 +270,43 @@ def move_button(move_direction):
     """
     move_dist = 0.05 # Quite arbitrary movemement amount
     global motor_locks
+    global motor_Y
+    global motor_X
     if zoomed_in:
         move_dist = 0.02
     if move_direction==0:
         # Move up
-        global motor_Y
         motor_locks[1].acquire()
         TM.MoveMotor(motor_Y,move_dist)
         motor_locks[1].release()
-    else if move_direction==1:
+    elif move_direction==1:
         # Move down
-        global motor_Y
         motor_locks[1].acquire()
         TM.MoveMotor(motor_Y,-move_dist)
         motor_locks[1].release()
-    else if move_direction?==2:
+    elif move_direction==2:
         # Move right
-        global motor_X
+        motor_locks[0].acquire()
+        TM.MoveMotor(motor_X,-move_dist)# minus is right
+        motor_locks[0].release()
+    elif move_direction==3:
+        # Move left
         motor_locks[0].acquire()
         TM.MoveMotor(motor_X,move_dist)
         motor_locks[0].release()
-    else if move_direction?==3:
-        # Move left
-        global motor_X
-        motor_locks[0].acquire()
-        TM.MoveMotor(motor_X,-move_dist)
-        motor_locks[0].release()
     else:
         print("Invalid move direction")
-def start_record_button():
+def start_record():
     """
     Button function for starting of recording
     """
     global record
     record = True
-def stop_record_button():
+    print("Recordin is on")
+def stop_record():
     global record
     record = False
+    print("Recordin is off")
 ############### Main script starts here ####################################
 
 # Serual numbers for motors
@@ -363,7 +363,9 @@ start_button = tkinter.Button(top, text ="Start program", command = start_thread
 up_button = tkinter.Button(top, text ="Move up", command = partial(move_button,0))
 down_button = tkinter.Button(top, text ="Move down", command = partial(move_button,1))
 right_button = tkinter.Button(top, text ="Move right", command = partial(move_button,2))
-left_buton = tkinter.Button(top, text ="Move left", command = partial(move_button,3))
+left_button = tkinter.Button(top, text ="Move left", command = partial(move_button,3))
+start_record_button = tkinter.Button(top, text ="Start recording", command = start_record)
+stop_record_button = tkinter.Button(top, text ="Stop recording", command = stop_record)
 # TODO add button for zoom in
 exit_button.pack()
 start_button.pack()
@@ -371,6 +373,8 @@ up_button.pack()
 down_button.pack()
 right_button.pack()
 left_button.pack()
+start_record_button.pack()
+stop_record_button.pack()
 top.mainloop()
 
 # Close the threads and the camera
