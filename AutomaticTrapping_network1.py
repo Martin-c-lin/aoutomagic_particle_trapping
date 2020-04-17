@@ -1,21 +1,31 @@
 # Script for controlling the whole setup automagically
 import ThorlabsCam as TC
 import ThorlabsMotor as TM
-# import control_threads
 import find_particle_threshold as fpt
 from instrumental import u
 import matplotlib.pyplot as plt
 import numpy as np
 from keras.models import load_model
-import threading,time,cv2,queue,copy,sys,tkinter
+import threading,time,cv2,queue,copy,sys,tkinter,os
 from tkinter import messagebox
 from functools import partial
-def get_default_control_parameters():
+import datetime
+from cv2 import VideoWriter, VideoWriter_fourcc
+def get_default_control_parameters(recording_path=None):
+
+    if recording_path == None:
+        now = datetime.datetime.now()
+        recording_path = 'F:/Martin/D'+str(now.year)+'-'+str(now.month)+'-'+str(now.day)+'_T'+str(now.hour)+'_'+str(now.minute)
+        try:
+            os.mkdir(recording_path)
+        except:
+            print('Directory already exist')
     control_parameters = {
     'trapped_counter': 0, # Maybe does not need to be here
     'serial_num_X': '27502438',
     'serial_num_Y': '27502419',
     'network_path': 'C:/Martin/Networks/',
+    'recording_path':recording_path,
     'polling_rate': 100,
     'continue_capture': True, # True if camera and dispaly should keep updating
     'motor_running': True, # Should the motor thread keep running?
@@ -170,7 +180,10 @@ class CameraThread(threading.Thread):
        print('Initiating threaded capture sequence')
        image_count = 0
        number_images_saved = 0 # counts
+       video_created = False
+       video_index = 0 # Number of current video
        # TODO - set framreate so we have a proper framerate in the videos!
+       # Also need to record the framerate etc
        global control_parameters
        while control_parameters['continue_capture']:
            # Set defaults for camera, aknowledge that this has been done
@@ -187,7 +200,12 @@ class CameraThread(threading.Thread):
 
            # Create an array to store the images which have been captured in
            saved_images = np.zeros([self.batch_size ,np.abs(control_parameters['AOI'][0]-control_parameters['AOI'][1]),np.abs(control_parameters['AOI'][3]-control_parameters['AOI'][2])])
-
+           if not video_created:
+               fourcc = VideoWriter_fourcc(*'MP42')
+               image_width = control_parameters['AOI'][1]-control_parameters['AOI'][0]
+               video = VideoWriter(control_parameters['recording_path']+'/moive'+str(video_index)+'.avi', fourcc, float(20), (image_width, image_width),isColor=False)
+               video_created = True
+               video_index += 1
            # Start continously capturin images now that the camera parameters have been set
            while control_parameters['continue_capture'] and not control_parameters['new_AOI_camera']:
                cam.wait_for_frame(timeout=None)
@@ -197,13 +215,17 @@ class CameraThread(threading.Thread):
                image[:][:][:] = cam.latest_frame()
                control_parameters['camera_lock'].release()
                image_count = image_count+1
-
                if control_parameters['record']:
-                   # TODO Create option for recording video instead of simple images
-                   saved_images[number_images_saved%self.batch_size ] = copy.copy(image) # Do not want a reference but a copy of its own
-                   number_images_saved+=1
-                   if number_images_saved%self.batch_size ==0 and number_images_saved>=1:
-                       np.save('test_images/frames'+str(number_images_saved-self.batch_size )+'_'+str(number_images_saved),np.uint8(saved_images))
+                   video.write(image)
+                   # Try to do this in the background
+                   # saved_images[number_images_saved%self.batch_size ] = copy.copy(image) # Do not want a reference but a copy of its own
+                   # number_images_saved+=1
+                   # if number_images_saved%self.batch_size ==0 and number_images_saved>=1:
+                   #     np.save(control_parameters['recording_path']+'/'+str(number_images_saved-self.batch_size )+'_'+str(number_images_saved),np.uint8(saved_images))
+
+           video.release()
+           del video
+           video_created = False
            # Close the livefeed and calculate the fps of the captures
            end = time.time()
            cam.stop_live_video()
