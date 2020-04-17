@@ -4,3 +4,4 @@ test*
 yacctab.py
 lextab.py
 __pycache__
+*.png
