@@ -51,7 +51,7 @@ def InitateMotor(serialNumber,pollingRate=250):
     motor.StartPolling(pollingRate)
 
     motor.EnableDevice()
-    #motor.SetJogVelocityParams(Decimal(0.01),Decimal(0.01)) # Jogging parameters set to minimum
+    motor.SetJogVelocityParams(Decimal(0.01),Decimal(0.01)) # Jogging parameters set to minimum
     return motor
 def DisconnectMotor(motor):
     motor.StopPolling()
