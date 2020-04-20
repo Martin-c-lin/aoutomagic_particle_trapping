@@ -73,13 +73,20 @@ def Get_Delta(image_width = 1080,d = 20e-6,d0x=-120e-6,d0y=30e-6):
     ym[0][0] = 0.7*d+d0y
     ym[1][0] = -0.7*d+d0y
     ym[2][0] = d0y
+
+    zm[0][0] = 1e-7
+    zm[1][0] = 0
+    zm[2][0] = 0
+
     Delta=np.zeros((M,N))
     for m in range(M):
         # Calculate delta according to eq : in paper
         # Using python "%" instead of Matlabs "rem"
         i2,i1 = divmod(m,n1)
-        # TODO Add z-dependence to improve the possibility to move the traps in 3d
-        Delta[m,:]=np.reshape(2*pi*p/lambda_/f*(np.transpose(I)*x*xm[i1,i2]+(y*I)*ym[i1,i2])%(2*pi),(1,N))
+        # TODO Add z-dependence to to ensuere that this works also in 3d
+        # Delta[m,:]=np.reshape(2*pi*p/lambda_/f*(np.transpose(I)*x*xm[i1,i2]+(y*I)*ym[i1,i2])%(2*pi),(1,N))
+        Delta[m,:]=np.reshape(2*pi*p/lambda_/f*((np.transpose(I)*x*xm[i1,i2]+(y*I)*ym[i1,i2]) + 1/(2*f)*zm[i1,i2] * ( (np.transpose(I)*x)**2 + (y*I)**2 )) % (2*pi),(1,N))
+
     return Delta,N,M
 def setup_fullscreen_plt_image():
     plt.switch_backend('QT4Agg')
