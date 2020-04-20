@@ -70,27 +70,3 @@ def find_exposure_time(cam,targetIntensity=100,margin=5):
     # Update the exposure time of the camera and return the target exposure
     cam.set_defaults(exposure_time=number_to_millisecond(midExposure))
     return number_to_millisecond(midExposure)
-
-"""
-list_instruments()
-cam = drivers.cameras.uc480.UC480_Camera()
-timeout = 10000*u.ms # correct way of making units
-exposure_time = 1*u.ms
-cam.set_defaults(left=0,right=1000,top=0,bot=1000,exposure_time=exposure_time,n_frames=1)
-print("I got this far")
-plt.ion()
-start = time.time()
-
-cam.start_capture(n_frames=100)
-#time.sleep(0.1)
-end = time.time()
-print(end - start)
-image=cam.get_captured_image(timeout=timeout)
-end = time.time()
-cam.close()
-
-print(end - start)
-print(np.shape(image))
-plt.imshow(image)
-plt.show()
-"""

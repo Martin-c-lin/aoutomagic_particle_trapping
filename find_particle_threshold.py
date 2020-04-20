@@ -5,27 +5,31 @@ import scipy.ndimage as ndi
 from skimage import measure
 
 def find_single_particle_center(img,threshold=127):
+    """
+    Locate the center of a single particle in an image.
+    Obsolete now, find_particle_centers is surperior in every way
+    """
     img_temp = cv2.medianBlur(img,5)
     ret,th1 = cv2.threshold(img_temp,threshold,255,cv2.THRESH_BINARY)
     cy, cx = ndi.center_of_mass(th1)
     # if np.isnan(cx) return inf?
     return cx,cy,th1
-def find_particle_centers(image,threshold,particle_size_threshold=100,bp=True):
+def find_particle_centers(image,threshold=120,particle_size_threshold=100,bright_particle=True):
     """
     Function which locates particle centers using thresholding.
     Parameters :
         image - Image with the particles
         threshold - Threshold value of the particle
         particle_size_threshold - minimum area of particle in image measured in pixels
-        bp - If the particle is brighter than the background or not
+        bright_particle - If the particle is brighter than the background or not
     Returns :
         x,y - arrays with the x and y coordinates of the particle in the image in pixels.
-            Returns empty arrays if no particle was found 
+            Returns empty arrays if no particle was found
     """
 
     # Do thresholding of the image
     img_temp = cv2.medianBlur(frame,5)
-    if bp:
+    if bright_particle:
         ret,thresholded_image = cv2.threshold(img_temp,threshold,255,cv2.THRESH_BINARY)
     else:
         ret,thresholded_image = cv2.threshold(img_temp,threshold,255,cv2.THRESH_BINARY_INV)
