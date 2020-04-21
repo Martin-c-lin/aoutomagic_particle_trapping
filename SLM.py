@@ -22,17 +22,19 @@ def GSW(N,M,Delta,image_width,nbr_iterations=30):
     I_N = np.uint8(np.ones((1,N)))
     Delta_J = np.exp(1j*Delta)
     for J in range(nbr_iterations):
-        # New slightly faster implementaition
         V = np.abs(np.mean((np.exp(1j*(I_m*Phi-Delta))),axis=0))
         V_abs = np.abs(V)
         W = np.mean(V_abs)*(W/V_abs)
         Phi = np.angle(np.sum(Delta_J*((W*V/V_abs)*I_N),axis=0))
-
-        print("Iteration no:",J)
+        #print("Iteration no:",J)
     return Phi
-def Get_Delta(image_width = 1080,d = 20e-6,d0x=-120e-6,d0y=30e-6):
+def get_delta(image_width = 1080,d = 20e-6,d0x=-120e-6,d0y=30e-6):
     """
+    Calculates delta in paper. I.e the phase shift of light when travelling from
+    the SLM to the trap position for a specific set of points
     Default parameters copied from Allessandros script
+
+
     """
     x = np.linspace(1,image_width,image_width)
     y = np.reshape(np.transpose(np.linspace(1,image_width,image_width)),(image_width,1))
@@ -40,7 +42,7 @@ def Get_Delta(image_width = 1080,d = 20e-6,d0x=-120e-6,d0y=30e-6):
     I = np.ones((1,image_width))
     N = len(x)**2
     p = 9e-6 # pixel size?
-    f = np.sqrt(2e-4*0.4)
+    f = np.sqrt(2e-4*0.4) # Focal length of imaging system. Empirically tested value
     z = 0
     lambda_ = 532e-9
 
@@ -67,6 +69,8 @@ def Get_Delta(image_width = 1080,d = 20e-6,d0x=-120e-6,d0y=30e-6):
     # d=15e-6;
     # dd=1e-7;
     #
+    # Define the trap positions
+    # TODO change them all into 1d arrays
     xm[0][0] = d0x
     xm[1][0] = d0x
     xm[2][0] = d0x+0.7*d*np.sqrt(3)
@@ -83,12 +87,17 @@ def Get_Delta(image_width = 1080,d = 20e-6,d0x=-120e-6,d0y=30e-6):
         # Calculate delta according to eq : in paper
         # Using python "%" instead of Matlabs "rem"
         i2,i1 = divmod(m,n1)
-        # TODO Add z-dependence to to ensuere that this works also in 3d
         # Delta[m,:]=np.reshape(2*pi*p/lambda_/f*(np.transpose(I)*x*xm[i1,i2]+(y*I)*ym[i1,i2])%(2*pi),(1,N))
+
+        # TODO Add z-dependence to to ensuere that this works also in 3d
         Delta[m,:]=np.reshape(2*pi*p/lambda_/f*((np.transpose(I)*x*xm[i1,i2]+(y*I)*ym[i1,i2]) + 1/(2*f)*zm[i1,i2] * ( (np.transpose(I)*x)**2 + (y*I)**2 )) % (2*pi),(1,N))
 
     return Delta,N,M
 def setup_fullscreen_plt_image():
+    '''
+    This script magically sets up pyplot lib so it displays an image on a secondary display
+    in full screen.
+    '''
     plt.switch_backend('QT4Agg')
 
     # a little hack to get screen size; from here [1]
@@ -99,7 +108,6 @@ def setup_fullscreen_plt_image():
     mgr.window.close()
     # hack end
 
-    x = [i for i in range(0,10)]
     plt.figure()
     #plt.imshow(image,cmap='gist_gray')
     plt.rcParams['toolbar'] = 'None'
@@ -113,8 +121,9 @@ def setup_fullscreen_plt_image():
     figManager.window.move(px, 0)
     figManager.window.showMaximized()
     figManager.window.setFocus()
+'''
 image_width = int(1080)
-Delta,N,M = Get_Delta(image_width)
+Delta,N,M = get_delta(image_width)
 start = time()
 image = np.reshape(GSW(N,M,Delta,image_width,nbr_iterations=20)*255/(2*pi),(image_width,image_width))
 print("Execution time GSW:",time()-start)
@@ -122,8 +131,9 @@ print("Execution time GSW:",time()-start)
 setup_fullscreen_plt_image()
 plt.imshow(image,cmap='gist_gray')
 plt.pause(1)
+'''
 # for i in range(30):
-#     Delta,N,M = Get_Delta(image_width,d=i*1e-6)
+#     Delta,N,M = get_delta(image_width,d=i*1e-6)
 #     start = time()
 #     image = np.reshape(GSW(N,M,Delta,image_width,nbr_iterations=0)*255/(2*pi),(image_width,image_width))
 #     plt.imshow(image,cmap='gist_gray')

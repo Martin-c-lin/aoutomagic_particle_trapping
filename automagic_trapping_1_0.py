@@ -123,11 +123,21 @@ def create_buttons(top):
     stop_record_button.grid(column=0,row=3)
 
     up_button.grid(column=1,row=0)
-    down_button..grid(column=1,row=1)
+    down_button.grid(column=1,row=1)
     right_button.grid(column=1,row=2)
     left_button.grid(column=1,row=3)
 
     toggle_bright_particle_button.grid(column=2,row=0)
+class SLMThread(threading.Thread):
+    import SLM
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self.setDaemon(True, threadID, name)
+    def run():
+        Delta,N,M = SLM.get_delta()
+        SLM_image = SLM.GSW(N,M,Delta)
 
 class TemperatureThread(threading.Thread):
         '''
@@ -149,6 +159,46 @@ class TemperatureThread(threading.Thread):
                 print('Current temperature is ',self.temperature_controller.measure_temperature())
                 time.sleep(1) # We do not need to update the temperature very often
             self.temperature_controller.turn_off_output()
+class TkinterDisplay:
+    import PIL.Image, PIL.ImageTk
+    def __init__(self, window, window_title,):
+         self.window = window
+         self.window.title(window_title)
+
+         # open video source (by default this will try to open the computer webcam)
+         #self.vid = MyVideoCapture()
+
+         # Create a canvas that can fit the above video source size
+         self.canvas = tkinter.Canvas(window, width = 1200, height = 1200)
+         self.canvas.pack()
+
+         # Button that lets the user take a snapshot
+         #self.btn_snapshot=tkinter.Button(window, text="Snapshot", width=50, command=self.snapshot)
+         #self.btn_snapshot.pack(anchor=tkinter.CENTER, expand=True)
+         create_buttons(self.window)
+         # TODO Add all the buttons
+
+         # After it is called once, the update method will be automatically called every delay milliseconds
+         self.delay = 50
+         self.update()
+
+         self.window.mainloop()
+
+     def snapshot(self):
+         # Get a frame from the video source
+         # ret, frame = self.vid.get_frame()
+         # if ret:
+         global image
+         cv2.imwrite("frame-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+
+     def update(self):
+         # Get a frame from the video source
+         global image
+         #TODO? Might wanna do some rescaling of the image so we can zoom in
+         self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(image))
+         self.canvas.create_image(0, 0, image = self.photo, anchor = tkinter.NW) # need to use a compatible image type
+
+         self.window.after(self.delay, self.update)
 class DisplayThread(threading.Thread):
     '''
     Thread class for plotting the result in the BG.
