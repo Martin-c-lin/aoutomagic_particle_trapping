@@ -1,16 +1,17 @@
 # Script for controlling the whole setup automagically
 import ThorlabsCam as TC
-import ThorlabsMotor as TM
+#import ThorlabsMotor as TM
 import find_particle_threshold as fpt
 from instrumental import u
 import matplotlib.pyplot as plt
 import numpy as np
-from keras.models import load_model
+# from keras.models import load_model
 import threading,time,cv2,queue,copy,sys,tkinter,os
-from tkinter import messagebox
+from tkinter import messagebox,RIGHT,LEFT
 from functools import partial
 import datetime
 from cv2 import VideoWriter, VideoWriter_fourcc
+import PIL.Image, PIL.ImageTk
 def get_default_control_parameters(recording_path=None):
 
     if recording_path == None:
@@ -77,7 +78,8 @@ def start_threads():
     camera_thread = CameraThread(1, 'Thread-camera')
     motor_X_thread = MotorThread(2,'Thread-motorX',motor_X,0) # Last argument is to indicate that it is the x-motor and not the y
     motor_Y_thread = MotorThread(3,'Thread-motorY',motor_Y,1)
-    display_thread = DisplayThread(4,'Thread-display')
+    slm_thread =
+    #display_thread = DisplayThread(4,'Thread-display')
     tracking_thread = TrackingThread(5,'Tracker_thread')
     #temperature_thread = TemperatureThread(6,'Temperature_thread')
 
@@ -105,18 +107,31 @@ def create_buttons(top):
     toggle_bright_particle_button = tkinter.Button(top, text ='Toggle particle brightness', command = toggle_bright_particle)
     # Idea - Use radiobutton for the toggle
     # TODO add button for zoom in
+    x_position = 1020
+    exit_button.place(x=x_position, y=10)
+    start_button.place(x=x_position, y=50)
+    up_button.place(x=x_position, y=90)
+    down_button.place(x=x_position, y=130)
+    right_button.place(x=x_position, y=170)
+    left_button.place(x=x_position, y=210)
+    start_record_button.place(x=x_position, y=250)
+    stop_record_button.place(x=x_position, y=290)
+    toggle_bright_particle_button.place(x=x_position, y=330)
+
     '''
-    exit_button.pack()
-    start_button.pack()
-    up_button.pack()
-    down_button.pack()
-    right_button.pack()
-    left_button.pack()
-    start_record_button.pack()
-    stop_record_button.pack()
-    toggle_bright_particle_button.pack()
-    '''
-    start_button.grid(column=0,row=0)
+    # Cannot mix pack,place and grid
+    exit_button.pack(side=RIGHT)
+    start_button.pack(side=RIGHT)
+    up_button.pack(side=RIGHT)
+    down_button.pack(side=RIGHT)
+    right_button.pack(side=RIGHT)
+    left_button.pack(side=RIGHT)
+    start_record_button.pack(side=RIGHT)
+    stop_record_button.pack(side=RIGHT)
+    toggle_bright_particle_button.pack(side=RIGHT)
+
+
+    start_button.grid(column=0,row=4)
     exit_button.grid(column=0,row=1)
 
     start_record_button.grid(column=0,row=2)
@@ -128,7 +143,8 @@ def create_buttons(top):
     left_button.grid(column=1,row=3)
 
     toggle_bright_particle_button.grid(column=2,row=0)
-class SLMThread(threading.Thread):
+    '''
+class SLMThread(threading.Thread,threadID,name):
     import SLM
     def __init__(self):
         threading.Thread.__init__(self)
@@ -138,7 +154,9 @@ class SLMThread(threading.Thread):
     def run():
         Delta,N,M = SLM.get_delta()
         SLM_image = SLM.GSW(N,M,Delta)
-
+        SLM.setup_fullscreen_plt_image()
+        plt.imshow(image,cmap='gist_gray')
+        plt.show()
 class TemperatureThread(threading.Thread):
         '''
         Class for running the temperature controller in the background
@@ -160,7 +178,7 @@ class TemperatureThread(threading.Thread):
                 time.sleep(1) # We do not need to update the temperature very often
             self.temperature_controller.turn_off_output()
 class TkinterDisplay:
-    import PIL.Image, PIL.ImageTk
+
     def __init__(self, window, window_title,):
          self.window = window
          self.window.title(window_title)
@@ -169,29 +187,28 @@ class TkinterDisplay:
          #self.vid = MyVideoCapture()
 
          # Create a canvas that can fit the above video source size
-         self.canvas = tkinter.Canvas(window, width = 1200, height = 1200)
-         self.canvas.pack()
+         self.canvas = tkinter.Canvas(window, width = 1000, height = 1000)
+         #self.canvas.grid(column=0,row=2)
+         self.canvas.place(x=0, y=0)
+         #self.canvas.pack(side=LEFT)
 
          # Button that lets the user take a snapshot
          #self.btn_snapshot=tkinter.Button(window, text="Snapshot", width=50, command=self.snapshot)
          #self.btn_snapshot.pack(anchor=tkinter.CENTER, expand=True)
          create_buttons(self.window)
          # TODO Add all the buttons
-
+         self.window.geometry('1500x1000')
          # After it is called once, the update method will be automatically called every delay milliseconds
          self.delay = 50
          self.update()
 
          self.window.mainloop()
 
-     def snapshot(self):
-         # Get a frame from the video source
-         # ret, frame = self.vid.get_frame()
-         # if ret:
+    def snapshot(self):
          global image
          cv2.imwrite("frame-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
 
-     def update(self):
+    def update(self):
          # Get a frame from the video source
          global image
          #TODO? Might wanna do some rescaling of the image so we can zoom in
@@ -271,6 +288,7 @@ class MotorThread(threading.Thread):
        return
 class CameraThread(threading.Thread):
    def __init__(self, threadID, name,batch_size=100):
+      # TODO add camera here
       threading.Thread.__init__(self)
       self.threadID = threadID
       self.name = name
@@ -325,6 +343,7 @@ class CameraThread(threading.Thread):
                    #     np.save(control_parameters['recording_path']+'/'+str(number_images_saved-self.batch_size )+'_'+str(number_images_saved),np.uint8(saved_images))
 
            video.release()
+
            del video
            video_created = False
            # Close the livefeed and calculate the fps of the captures
@@ -426,7 +445,7 @@ def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
         # If exact values have been provided for all the
         # TODO change so that this syntax is default
         if left is not None and right is not None and up is not None and down is not None:
-            if 0<=left<=1279 and left<=right<=1280 and 0<=up<=1079 and up<=down<=1080
+            if 0<=left<=1279 and left<=right<=1280 and 0<=up<=1079 and up<=down<=1080:
                 control_parameters['AOI'][0] = left
                 control_parameters['AOI'][1] = right
                 control_parameters['AOI'][2] = up
@@ -625,6 +644,22 @@ def set_particle_threshold():
     return
 ############### Main script starts here ####################################
 
+control_parameters = get_default_control_parameters(recording_path='test_recording')
+cam = TC.get_camera()
+cam.set_defaults(left=control_parameters['AOI'][0],right=control_parameters['AOI'][1],top=control_parameters['AOI'][2],bot=control_parameters['AOI'][3],n_frames=1)
+exposure_time = TC.find_exposure_time(cam) # automagically finds a decent exposure time
+print('Exposure time = ',exposure_time)
+image = cam.grab_image()
+camera_thread = CameraThread(1, 'Thread-camera')
+thread_list = []
+thread_list.append(camera_thread)
+camera_thread.start()
+print(np.shape(image))
+T_D = TkinterDisplay(tkinter.Tk(), "Control display")
+
+#camera_thread.join
+
+'''
 control_parameters = get_default_control_parameters()
 # Initate contact with motors
 #TODO move these to the threads or not?
@@ -663,3 +698,4 @@ TM.DisconnectMotor(motor_X)
 TM.DisconnectMotor(motor_Y)
 print(thread_list)
 sys.exit()
+'''
