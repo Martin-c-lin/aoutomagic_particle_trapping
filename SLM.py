@@ -15,7 +15,7 @@ def RS(N,M,Delta,image_width):
     RN = np.transpose(np.random.uniform(low=0.0, high=2*pi, size=(1,M)))*np.ones((1,N))
     return np.angle(np.sum(np.exp(1j*(Delta+RN)),axis=0))+pi
 # Weighted Gerchberg-Saxton Algorithm (GSW)
-def GSW(N,M,Delta,image_width,nbr_iterations=30):
+def GSW(N,M,Delta,image_width=1080,nbr_iterations=30):
     Phi = RS(N,M,Delta,image_width) # Initial guess
     W = np.ones((M,1))
     I_m =np.uint8(np.ones((M,1)))
@@ -27,7 +27,7 @@ def GSW(N,M,Delta,image_width,nbr_iterations=30):
         W = np.mean(V_abs)*(W/V_abs)
         Phi = np.angle(np.sum(Delta_J*((W*V/V_abs)*I_N),axis=0))
         #print("Iteration no:",J)
-    return Phi
+    return np.reshape(Phi*255/(2*pi),(image_width,image_width))
 def get_delta(image_width = 1080,d = 20e-6,d0x=-120e-6,d0y=30e-6):
     """
     Calculates delta in paper. I.e the phase shift of light when travelling from

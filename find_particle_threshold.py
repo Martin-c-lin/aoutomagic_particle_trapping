@@ -28,7 +28,7 @@ def find_particle_centers(image,threshold=120,particle_size_threshold=100,bright
     """
 
     # Do thresholding of the image
-    img_temp = cv2.medianBlur(frame,5)
+    img_temp = cv2.medianBlur(image,5)
     if bright_particle:
         ret,thresholded_image = cv2.threshold(img_temp,threshold,255,cv2.THRESH_BINARY)
     else:

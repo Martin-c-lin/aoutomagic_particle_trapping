@@ -1,12 +1,12 @@
 # Script for controlling the whole setup automagically
 import ThorlabsCam as TC
 import SLM
-#import ThorlabsMotor as TM
+import ThorlabsMotor as TM
 import find_particle_threshold as fpt
 from instrumental import u
 import matplotlib.pyplot as plt
 import numpy as np
-# from keras.models import load_model
+# from keras.models import load_model # Not curently in use
 import threading,time,cv2,queue,copy,sys,tkinter,os
 from tkinter import messagebox,RIGHT,LEFT
 from functools import partial
@@ -50,10 +50,12 @@ def get_default_control_parameters(recording_path=None):
     'particle_threshold':120,
     'particle_size_threshold':100, # Parcticle detection threshold
     'bright_particle':True, # Is particle brighter than the background?
-    'traps_occupied':[False,False,False], # Which of the traps have a particle inside them
+    'jog_motor_in_direction':[False,False,False,False],
+    # # TODO, make this from the number of traps
     'camera_lock': threading.Lock(),
     'motor_locks': [threading.Lock(),threading.Lock()]
     }
+    control_parameters['traps_occupied'] = [False for i in range(len(control_parameters['traps_absolute_pos'][0]))]
     return control_parameters
 def terminate_threads():
     '''
@@ -69,25 +71,24 @@ def terminate_threads():
         thread.join()
     for thread in thread_list:
         del thread
-def start_threads(thread_list):
+def start_threads():
     """
     Function for starting all the threads, can only be called once
     """
     global motor_X
     global motor_Y
+    global thread_list
     # global temperature_controller
     camera_thread = CameraThread(1, 'Thread-camera')
     motor_X_thread = MotorThread(2,'Thread-motorX',motor_X,0) # Last argument is to indicate that it is the x-motor and not the y
     motor_Y_thread = MotorThread(3,'Thread-motorY',motor_Y,1)
     slm_thread =SLMThread(4,'Thread-SLM')
-    #display_thread = DisplayThread(4,'Thread-display')
     tracking_thread = TrackingThread(5,'Tracker_thread')
     #temperature_thread = TemperatureThread(6,'Temperature_thread')
 
     camera_thread.start()
     motor_X_thread.start()
     motor_Y_thread.start()
-    display_thread.start()
     tracking_thread.start()
     slm_thread.start()
     # temperature_thread.start()
@@ -95,13 +96,12 @@ def start_threads(thread_list):
     thread_list.append(camera_thread)
     thread_list.append(motor_X_thread)
     thread_list.append(motor_Y_thread)
-    thread_list.append(display_thread)
     thread_list.append(tracking_thread)
     thread_list.append(slm_thread)
     # thread_list.append(temperature_thread)
 def create_buttons(top):
     exit_button = tkinter.Button(top, text ='Exit program', command = terminate_threads)
-    start_button = tkinter.Button(top, text ='Start program', command = start_threads)
+    #start_button = tkinter.Button(top, text ='Start program', command = start_threads)
     up_button = tkinter.Button(top, text ='Move up', command = partial(move_button,0))
     down_button = tkinter.Button(top, text ='Move down', command = partial(move_button,1))
     right_button = tkinter.Button(top, text ='Move right', command = partial(move_button,2))
@@ -112,8 +112,8 @@ def create_buttons(top):
     # Idea - Use radiobutton for the toggle
     # TODO add button for zoom in
     x_position = 1020
-    exit_button.place(x=x_position, y=10)
-    start_button.place(x=x_position, y=50)
+    exit_button.place(x=x_position, y=50)
+    #start_button.place(x=x_position, y=50)
     up_button.place(x=x_position, y=90)
     down_button.place(x=x_position, y=130)
     right_button.place(x=x_position, y=170)
@@ -121,45 +121,20 @@ def create_buttons(top):
     start_record_button.place(x=x_position, y=250)
     stop_record_button.place(x=x_position, y=290)
     toggle_bright_particle_button.place(x=x_position, y=330)
-
-    '''
-    # Cannot mix pack,place and grid
-    exit_button.pack(side=RIGHT)
-    start_button.pack(side=RIGHT)
-    up_button.pack(side=RIGHT)
-    down_button.pack(side=RIGHT)
-    right_button.pack(side=RIGHT)
-    left_button.pack(side=RIGHT)
-    start_record_button.pack(side=RIGHT)
-    stop_record_button.pack(side=RIGHT)
-    toggle_bright_particle_button.pack(side=RIGHT)
-
-
-    start_button.grid(column=0,row=4)
-    exit_button.grid(column=0,row=1)
-
-    start_record_button.grid(column=0,row=2)
-    stop_record_button.grid(column=0,row=3)
-
-    up_button.grid(column=1,row=0)
-    down_button.grid(column=1,row=1)
-    right_button.grid(column=1,row=2)
-    left_button.grid(column=1,row=3)
-
-    toggle_bright_particle_button.grid(column=2,row=0)
-    '''
 class SLMThread(threading.Thread):
     def __init__(self,threadID,name):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
-        self.setDaemon(True, threadID, name)
-    def run():
+        self.setDaemon(True)
+    def run(self):
+        global control_parameters
         Delta,N,M = SLM.get_delta()
         SLM_image = SLM.GSW(N,M,Delta)
         SLM.setup_fullscreen_plt_image()
-        plt.imshow(image,cmap='gist_gray')
-        plt.show()
+        plt.imshow(SLM_image,cmap='gist_gray')
+        while control_parameters['continue_capture']:
+            plt.pause(5)
 class TemperatureThread(threading.Thread):
         '''
         Class for running the temperature controller in the background
@@ -204,12 +179,13 @@ class TkinterDisplay:
          # After it is called once, the update method will be automatically called every delay milliseconds
          self.delay = 50
          self.update()
-
+         start_threads()
          self.window.mainloop()
 
     def snapshot(self):
          global image
-         cv2.imwrite("frame-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+         global control_parameters
+         cv2.imwrite(get_control_parameters['recording_path']+"/frame-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
 
     def update(self):
          # Get a frame from the video source
@@ -283,9 +259,20 @@ class MotorThread(threading.Thread):
            # Acquire lock to ensure that it is safe to move the motor
            control_parameters['motor_locks'][self.axis].acquire()
 
-           if np.abs(control_parameters['target_particle_center'][self.axis]-control_parameters['traps_relative_pos'][self.axis])>=control_parameters['movement_threshold'] and not np.isnan(control_parameters['target_particle_center'][self.axis]):
-                maxPixel = np.abs(control_parameters['AOI'][1]-control_parameters['AOI'][0])
-                TM.MoveMotorToPixel(self.motor ,targetPixel=control_parameters['target_particle_center'][self.axis],currentPixel=control_parameters['traps_relative_pos'][self.axis],maxPixel=maxPixel)
+           # Check if user is jogging the motor
+           if control_parameters['jog_motor_in_direction'][self.axis*2]:
+               TM.MoveMotor(self.motor,0.03)
+               control_parameters['jog_motor_in_direction'][self.axis*2] = False
+               print("User jogging motor")
+           if control_parameters['jog_motor_in_direction'][self.axis*2+1]:
+               TM.MoveMotor(self.motor,-0.03)
+               control_parameters['jog_motor_in_direction'][self.axis*2+1] = False
+               print("User jogging motor")
+           # Check that there is a target particle and if so where to move
+           elif len(control_parameters['target_particle_center'])>0:
+               if np.abs(control_parameters['target_particle_center'][self.axis]-control_parameters['target_trap_pos'][self.axis])>=control_parameters['movement_threshold']:
+                    maxPixel = np.abs(control_parameters['AOI'][1]-control_parameters['AOI'][0])
+                    TM.MoveMotorToPixel(self.motor ,targetPixel=control_parameters['target_particle_center'][self.axis],currentPixel=control_parameters['target_trap_pos'][self.axis],maxPixel=maxPixel)
            control_parameters['motor_locks'][self.axis].release()
            time.sleep(0.1) # To give other threads some time to work
        return
@@ -382,11 +369,13 @@ class TrackingThread(threading.Thread):
 
                # Find the closest particles
                if len(x)>0: # Check that there are particles present
+                   # Todo add motor lock here?
                    min_index_trap,min_index_particle = find_closest_unoccupied()
-                   control_parameters['target_trap_pos'] = control_parameters['traps_relative_pos'][min_index_trap]
-                   control_parameters['target_particle_center'] = control_parameters['particle_centers'][min_index_particle]
+                   control_parameters['target_trap_pos'] = [control_parameters['traps_relative_pos'][0][min_index_trap],control_parameters['traps_relative_pos'][1][min_index_trap]]
+                   control_parameters['target_particle_center'] = [control_parameters['particle_centers'][0][min_index_particle],control_parameters['particle_centers'][1][min_index_particle]]
                else:
-                   print('No particles in frame!')
+                   control_parameters['target_particle_center'] = []
+                   #print('No particles in frame!')
 
            #     #control_parameters['particle_centers'][0],control_parameters['particle_centers'][1],picture = fpt.find_single_particle_center(copy.copy(image),threshold = 200) # Do we need a copy of this or move it to another thread?s
            #     # TODO, change the zoom in function
@@ -526,11 +515,12 @@ def get_particle_trap_distances():
     nbr_traps = len(control_parameters['traps_absolute_pos'][0])
     nbr_particles = len(control_parameters['particle_centers'][0])
     distances = np.ones((nbr_traps,nbr_particles))
-
     for i in range(nbr_traps):
         for j in range(nbr_particles):
-            distances[i][j] = np.sqrt((control_parameters['traps_relative_pos'][i][0]-control_parameters['particle_centers'][j][0])**2+...
-                                (control_parameters['traps_relative_pos'][i][1]-control_parameters['particle_centers'][j][1])**2)
+            dx = (control_parameters['traps_relative_pos'][0][i]-control_parameters['particle_centers'][0][j])
+            dy = (control_parameters['traps_relative_pos'][1][i]-control_parameters['particle_centers'][1][j])
+            distances[i][j] = np.sqrt(dx*dx+dy*dy)
+            #distances[i][j] = np.sqrt((control_parameters['traps_relative_pos'][0][i]-control_parameters['particle_centers'][0][j])**2+(control_parameters['traps_relative_pos'][1][i]-control_parameters['particle_centers'][1][j])**2)
     return distances
 def trap_occupied(distances,trap_index,threshold_distance=50):
     '''
@@ -574,7 +564,7 @@ def find_closest_unoccupied():
     min_index_trap = 0 # Index of unoccupied trap which is closest to a particle
 
     for trap_idx in range(len(control_parameters['traps_occupied'])):
-        trapped = control_parameters['traps_occupied'][idx]
+        trapped = control_parameters['traps_occupied'][trap_idx]
         if not trapped:
             particle_idx = np.argmin(distances[trap_idx])
             if distances[trap_idx][particle_idx]<min_distance:
@@ -588,7 +578,7 @@ def find_closest_unoccupied():
     tmp[indices] = distances[indices]
     return ind = np.unravel_index(np.argmin(tmp, axis=None), np.shape(tmp))
     '''
-    return min_index_trap,min_index_particle,min_distance
+    return min_index_trap,min_index_particle
 def move_button(move_direction):
     '''
     Button function for manually moving the motors a bit
@@ -598,32 +588,21 @@ def move_button(move_direction):
     move_direction = 2 => move right
     move_direction = 3 => move left
     '''
-    move_dist = 0.05 # Quite arbitrary movemement amount
     global control_parameters
-    global motor_Y
-    global motor_X
-    if control_parameters['zoomed_in']:
-        move_dist = 0.02
+
     if move_direction==0:
         # Move up (Particles in image move up on the screen)
-        control_parameters['motor_locks'][1].acquire()
-        TM.MoveMotor(motor_Y,-move_dist)
-        control_parameters['motor_locks'][1].release()
+        control_parameters['jog_motor_in_direction'][3]=True
+
     elif move_direction==1:
+        control_parameters['jog_motor_in_direction'][2]=True
         # Move down
-        control_parameters['motor_locks'][1].acquire()
-        TM.MoveMotor(motor_Y,move_dist)
-        control_parameters['motor_locks'][1].release()
     elif move_direction==2:
+        control_parameters['jog_motor_in_direction'][0]=True
         # Move right
-        control_parameters['motor_locks'][0].acquire()
-        TM.MoveMotor(motor_X,-move_dist)# minus is right
-        control_parameters['motor_locks'][0].release()
     elif move_direction==3:
+        control_parameters['jog_motor_in_direction'][1]=True
         # Move left
-        control_parameters['motor_locks'][0].acquire()
-        TM.MoveMotor(motor_X,move_dist)
-        control_parameters['motor_locks'][0].release()
     else:
         print('Invalid move direction')
 def start_record():
@@ -646,7 +625,8 @@ def toggle_bright_particle():
 def set_particle_threshold():
     return
 ############### Main script starts here ####################################
-
+'''
+# Simple test  which can be run without motors
 control_parameters = get_default_control_parameters(recording_path='test_recording')
 cam = TC.get_camera()
 cam.set_defaults(left=control_parameters['AOI'][0],right=control_parameters['AOI'][1],top=control_parameters['AOI'][2],bot=control_parameters['AOI'][3],n_frames=1)
@@ -684,11 +664,7 @@ control_parameters['particle_centers'][0],control_parameters['particle_centers']
 # Create a empty list to put the threads in
 thread_list = []
 
-# Create a TK
-top = tkinter.Tk()
-# Create some buttons for basic control
-create_buttons(top)
-top.mainloop()
+T_D = TkinterDisplay(tkinter.Tk(), "Control display")
 
 # Close the threads and the camera
 control_parameters['continue_capture'] = False # All threds exits their main loop once this parameter is changed
@@ -701,4 +677,3 @@ TM.DisconnectMotor(motor_X)
 TM.DisconnectMotor(motor_Y)
 print(thread_list)
 sys.exit()
-'''
