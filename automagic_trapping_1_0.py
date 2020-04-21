@@ -1,5 +1,6 @@
 # Script for controlling the whole setup automagically
 import ThorlabsCam as TC
+import SLM
 #import ThorlabsMotor as TM
 import find_particle_threshold as fpt
 from instrumental import u
@@ -68,7 +69,7 @@ def terminate_threads():
         thread.join()
     for thread in thread_list:
         del thread
-def start_threads():
+def start_threads(thread_list):
     """
     Function for starting all the threads, can only be called once
     """
@@ -78,7 +79,7 @@ def start_threads():
     camera_thread = CameraThread(1, 'Thread-camera')
     motor_X_thread = MotorThread(2,'Thread-motorX',motor_X,0) # Last argument is to indicate that it is the x-motor and not the y
     motor_Y_thread = MotorThread(3,'Thread-motorY',motor_Y,1)
-    slm_thread =
+    slm_thread =SLMThread(4,'Thread-SLM')
     #display_thread = DisplayThread(4,'Thread-display')
     tracking_thread = TrackingThread(5,'Tracker_thread')
     #temperature_thread = TemperatureThread(6,'Temperature_thread')
@@ -88,13 +89,16 @@ def start_threads():
     motor_Y_thread.start()
     display_thread.start()
     tracking_thread.start()
-    print('Camera,display, motor_X and motor_Y threads created')
-    global thread_list
+    slm_thread.start()
+    # temperature_thread.start()
+    print('Camera, SLM, tracking, motor_X and motor_Y threads created')
     thread_list.append(camera_thread)
     thread_list.append(motor_X_thread)
     thread_list.append(motor_Y_thread)
     thread_list.append(display_thread)
     thread_list.append(tracking_thread)
+    thread_list.append(slm_thread)
+    # thread_list.append(temperature_thread)
 def create_buttons(top):
     exit_button = tkinter.Button(top, text ='Exit program', command = terminate_threads)
     start_button = tkinter.Button(top, text ='Start program', command = start_threads)
@@ -144,9 +148,8 @@ def create_buttons(top):
 
     toggle_bright_particle_button.grid(column=2,row=0)
     '''
-class SLMThread(threading.Thread,threadID,name):
-    import SLM
-    def __init__(self):
+class SLMThread(threading.Thread):
+    def __init__(self,threadID,name):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
@@ -193,8 +196,8 @@ class TkinterDisplay:
          #self.canvas.pack(side=LEFT)
 
          # Button that lets the user take a snapshot
-         #self.btn_snapshot=tkinter.Button(window, text="Snapshot", width=50, command=self.snapshot)
-         #self.btn_snapshot.pack(anchor=tkinter.CENTER, expand=True)
+         self.btn_snapshot=tkinter.Button(window, text="Snapshot", width=50, command=self.snapshot)
+         self.btn_snapshot.place(x=1100, y=0)
          create_buttons(self.window)
          # TODO Add all the buttons
          self.window.geometry('1500x1000')
@@ -657,7 +660,7 @@ camera_thread.start()
 print(np.shape(image))
 T_D = TkinterDisplay(tkinter.Tk(), "Control display")
 
-#camera_thread.join
+camera_thread.join()
 
 '''
 control_parameters = get_default_control_parameters()
