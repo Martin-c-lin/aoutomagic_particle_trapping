@@ -8,13 +8,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 # from keras.models import load_model # Not curently in use
 import threading,time,cv2,queue,copy,sys,tkinter,os
-from tkinter import messagebox,RIGHT,LEFT
+from tkinter import messagebox
 from functools import partial
 import datetime
 from cv2 import VideoWriter, VideoWriter_fourcc
 import PIL.Image, PIL.ImageTk
 def get_default_control_parameters(recording_path=None):
-
+    # TODO : change this into a class
     if recording_path == None:
         now = datetime.datetime.now()
         recording_path = 'F:/Martin/D'+str(now.year)+'-'+str(now.month)+'-'+str(now.day)+'_T'+str(now.hour)+'_'+str(now.minute)
@@ -39,6 +39,7 @@ def get_default_control_parameters(recording_path=None):
     'new_AOI_display': False,
     'movement_threshold': 30,
     'record':False,
+    'tracking_on':True,
     'target_temperature':25,
 
     'traps_absolute_pos':[[921,921],[680,537]], #[500,500],# Change to aritrary number of traps
@@ -93,12 +94,12 @@ def start_threads():
     slm_thread.start()
     # temperature_thread.start()
     print('Camera, SLM, tracking, motor_X and motor_Y threads created')
+    # thread_list.append(temperature_thread)
     thread_list.append(camera_thread)
     thread_list.append(motor_X_thread)
     thread_list.append(motor_Y_thread)
     thread_list.append(tracking_thread)
     thread_list.append(slm_thread)
-    # thread_list.append(temperature_thread)
 def create_buttons(top):
     global control_parameters
     exit_button = tkinter.Button(top, text ='Exit program', command = terminate_threads)
@@ -366,72 +367,31 @@ class TrackingThread(threading.Thread):
        global control_parameters
        # network1 = load_model(control_parameters['network_path']+'network1.h5')
        # network2 = load_model(control_parameters['network_path']+'network_101x101_2.h5')
-       i = 0
        zoom_counter = 0
        while control_parameters['continue_capture']: # Change to continue tracking?
-           if not control_parameters['zoomed_in']:
-               '''
-               We are in full frame mode looking for a particle
-               '''
-               x,y = fpt.find_particle_centers(copy.copy(image),
-                                                threshold=control_parameters['particle_threshold'],
-                                                particle_size_threshold=control_parameters['particle_size_threshold'],
-                                                bright_particle=control_parameters['bright_particle'])
-               control_parameters['particle_centers'] = [x,y]
 
-               # Find the closest particles
-               if len(x)>0: # Check that there are particles present
-                   # Todo add motor lock here?
-                   min_index_trap,min_index_particle = find_closest_unoccupied()
-                   if min_index_particle is not None:
-                       control_parameters['target_trap_pos'] = [control_parameters['traps_relative_pos'][0][min_index_trap],control_parameters['traps_relative_pos'][1][min_index_trap]]
-                       control_parameters['target_particle_center'] = [control_parameters['particle_centers'][0][min_index_particle],control_parameters['particle_centers'][1][min_index_particle]]
-               else:
-                   control_parameters['target_particle_center'] = []
-                   #print('No particles in frame!')
+            if control_parameters['tracking_on']:
+               if not control_parameters['zoomed_in']:
+                   '''
+                   We are in full frame mode looking for a particle
+                   '''
+                   x,y = fpt.find_particle_centers(copy.copy(image),
+                                                    threshold=control_parameters['particle_threshold'],
+                                                    particle_size_threshold=control_parameters['particle_size_threshold'],
+                                                    bright_particle=control_parameters['bright_particle'])
+                   control_parameters['particle_centers'] = [x,y]
 
-           #     #control_parameters['particle_centers'][0],control_parameters['particle_centers'][1],picture = fpt.find_single_particle_center(copy.copy(image),threshold = 200) # Do we need a copy of this or move it to another thread?s
-           #     # TODO, change the zoom in function
-           #     if is_trapped_single():
-           #         '''
-           #         We are not zoomed in but have found a particle.
-           #         Time to zoom in on it.
-           #         '''
-           #         control_parameters['zoomed_in'] =  True
-           #         half_image_width = 50
-           #         control_parameters['movement_threshold'] = 10
-           #         set_AOI(half_image_width=half_image_width)
-           # elif control_parameters['zoomed_in']:
-           #     '''
-           #     We are in zoomed in mode ready to predict the position using a network
-           #     '''
-           #     # predict_particle_position(network2,print_position=False) # Network cannot yet be trusted. Was fit to differen objectve magnification
-           #     #control_parameters['particle_centers'][0],control_parameters['particle_centers'][1],picture = fpt.find_single_particle_center(copy.copy(image),threshold = 200)
-           #
-           #     x,y = fpt.find_particle_centers(copy.copy(image),
-           #                                     threshold=control_parameters['particle_threshold'],
-           #                                     particle_size_threshold=control_parameters['particle_size_threshold'],
-           #                                     bright_particle=control_parameters['bright_particle'])
-           #     control_parameters['particle_centers'] = [x,y]
-           #     print('Centers are',control_parameters['particle_centers'])
-           #
-           #     if is_trapped_single():
-           #         zoom_counter = 0 # particle is trapped do not want to increase the counter
-           #     else:
-           #        '''
-           #        We are in zoomed in mode but have lost the particle
-           #        '''
-           #        zoom_counter += 1 # Particle might not be trapped, lets wait and see
-           #        if zoom_counter>10:
-           #            #
-           #            control_parameters['zoomed_in'] =  False
-           #            half_image_width = 500
-           #            control_parameters['movement_threshold'] = 20
-           #            set_AOI(half_image_width=half_image_width)
-           #            zoom_counter = 0
-           time.sleep(0.5) # Needed to prevent this thread from running too fast
-           print("Centers are",control_parameters['particle_centers'])
-           i+=1
+                   # Find the closest particles
+                   if len(x)>0: # Check that there are particles present
+                       # Todo add motor lock here?
+                       min_index_trap,min_index_particle = find_closest_unoccupied()
+                       if min_index_particle is not None:
+                           control_parameters['target_trap_pos'] = [control_parameters['traps_relative_pos'][0][min_index_trap],control_parameters['traps_relative_pos'][1][min_index_trap]]
+                           control_parameters['target_particle_center'] = [control_parameters['particle_centers'][0][min_index_particle],control_parameters['particle_centers'][1][min_index_particle]]
+                   else:
+                       control_parameters['target_particle_center'] = []
+               print("Centers are",control_parameters['particle_centers'])
+            time.sleep(0.1) # Needed to prevent this thread from running too fast
 def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
     '''
     Function for changing the Area Of Interest for the camera to the box specified by
@@ -536,19 +496,19 @@ def get_particle_trap_distances():
             distances[i,j] = np.sqrt(dx*dx+dy*dy)
             #distances[i][j] = np.sqrt((control_parameters['traps_relative_pos'][0][i]-control_parameters['particle_centers'][0][j])**2+(control_parameters['traps_relative_pos'][1][i]-control_parameters['particle_centers'][1][j])**2)
     return distances
-def trap_occupied(distances,trap_index,threshold_distance=50):
+def trap_occupied(distances,trap_index):
     '''
     Checks if a specific trap is occupied by a particle. If so set that trap to occupied
     '''
     global control_parameters
 
     # Check that trap index is ok
-    if trap_index>len(distances) or trap_index>len(control_parameters['traps_occupied']):
+    if trap_index>len(control_parameters['traps_occupied']):
         print('Trap index out of range')
-        return
+        return None
     for i in range(len(distances[trap_index,:])):
         dist_to_trap = distances[trap_index,i]
-        if dist_to_trap<=threshold_distance:
+        if dist_to_trap<=control_parameters['movement_threshold']:
             control_parameters['traps_occupied'][trap_index] = True
             # TODO remove the unused particles
 
@@ -557,7 +517,10 @@ def trap_occupied(distances,trap_index,threshold_distance=50):
     return None
 def check_all_traps(distances=None):
     '''
-    Updates all traps to see if they are occupied
+    Updates all traps to see if they are occupied.
+    Returns the indices of the particles which are trapped. Indices refers to their
+    position in the control_parameters['particle_centers'] array.
+    Returns an empty array if there are no trapped particles
     '''
     if distances is None:
         distances = get_particle_trap_distances()
@@ -570,36 +533,33 @@ def check_all_traps(distances=None):
 def find_closest_unoccupied():
     '''
     Function for finding the paricle and (unoccupied) trap which are the closest
-
-    Returns : min_index_trap,min_index_particle,min_distance
-
+    Returns : min_index_trap,min_index_particle.
+        Index of the untrapped particle closest to an unoccupied trap.
     '''
 
     distances = get_particle_trap_distances()
     trapped_particles = check_all_traps(distances)
-    distances[:,trapped_particles] = 1e6 # These indices are not ok
+    distances[:,trapped_particles] = 1e6 # These indices are not ok, put them very large
     print("trapped particles",trapped_particles,'Distances',distances,'traps occupied',control_parameters['traps_occupied'])
 
-    min_distance = 2000
+    min_distance = 2000 # If the particle is not within 2000 pixels then it is not within the frame
     min_index_particle = None # Index of particle which is closes to an unoccupied trap
     min_index_trap = None # Index of unoccupied trap which is closest to a particle
 
+    # Check all the traps
     for trap_idx in range(len(control_parameters['traps_occupied'])):
         trapped = control_parameters['traps_occupied'][trap_idx]
-        if not trapped:
 
-            particle_idx = np.argmin(distances[trap_idx]) #TODO  Will not work as intended
-            if distances[trap_idx,particle_idx]<min_distance and particle_idx:
-                min_distance = distances[trap_idx][particle_idx]
+        # If there is not a particle trapped in the trap check for the closest particle
+        if not trapped:
+            particle_idx = np.argmin(distances[trap_idx])
+
+            # If particle is within the threshold then update min_index and trap index as well as min distance
+            if distances[trap_idx,particle_idx]<min_distance:
+                min_distance = distances[trap_idx,particle_idx]
                 min_index_trap = trap_idx
                 min_index_particle = particle_idx
 
-    '''# Todo rewrite this function in a sexier way
-    indices = [i for i in range(len(control_parameters['traps_occupied'])) if not control_parameters['traps_occupied']]
-    tmp = 1e6*np.ones((np.shape(distances)))
-    tmp[indices] = distances[indices]
-    return ind = np.unravel_index(np.argmin(tmp, axis=None), np.shape(tmp))
-    '''
     return min_index_trap,min_index_particle
 def move_button(move_direction):
     '''
@@ -648,6 +608,8 @@ def toggle_bright_particle():
 def set_particle_threshold():
     threshold=control_parameters['particle_threshold'] = threshold
     return
+def toggle_tracking():
+    control_parameters['tracking_on'] = not control_parameters['tracking_on']
 ############### Main script starts here ####################################
 '''
 # Simple test  which can be run without motors
@@ -695,6 +657,7 @@ control_parameters['continue_capture'] = False # All threds exits their main loo
 control_parameters['motor_running'] = False
 
 # Shut down camera and motors safely
+terminate_threads()
 cam.close()
 
 TM.DisconnectMotor(motor_X)
