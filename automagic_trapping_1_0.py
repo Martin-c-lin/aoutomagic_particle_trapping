@@ -14,7 +14,7 @@ import datetime
 from cv2 import VideoWriter, VideoWriter_fourcc
 import PIL.Image, PIL.ImageTk
 def get_default_control_parameters(recording_path=None):
-
+    # TODO : change this into a class
     if recording_path == None:
         now = datetime.datetime.now()
         recording_path = 'F:/Martin/D'+str(now.year)+'-'+str(now.month)+'-'+str(now.day)+'_T'+str(now.hour)+'_'+str(now.minute)
@@ -93,12 +93,12 @@ def start_threads():
     slm_thread.start()
     # temperature_thread.start()
     print('Camera, SLM, tracking, motor_X and motor_Y threads created')
+    # thread_list.append(temperature_thread)
     thread_list.append(camera_thread)
     thread_list.append(motor_X_thread)
     thread_list.append(motor_Y_thread)
     thread_list.append(tracking_thread)
     thread_list.append(slm_thread)
-    # thread_list.append(temperature_thread)
 def create_buttons(top):
     global control_parameters
     exit_button = tkinter.Button(top, text ='Exit program', command = terminate_threads)
@@ -536,19 +536,19 @@ def get_particle_trap_distances():
             distances[i,j] = np.sqrt(dx*dx+dy*dy)
             #distances[i][j] = np.sqrt((control_parameters['traps_relative_pos'][0][i]-control_parameters['particle_centers'][0][j])**2+(control_parameters['traps_relative_pos'][1][i]-control_parameters['particle_centers'][1][j])**2)
     return distances
-def trap_occupied(distances,trap_index,threshold_distance=50):
+def trap_occupied(distances,trap_index):
     '''
     Checks if a specific trap is occupied by a particle. If so set that trap to occupied
     '''
     global control_parameters
 
     # Check that trap index is ok
-    if trap_index>len(distances) or trap_index>len(control_parameters['traps_occupied']):
+    if trap_index>len(control_parameters['traps_occupied']):
         print('Trap index out of range')
-        return
+        return None
     for i in range(len(distances[trap_index,:])):
         dist_to_trap = distances[trap_index,i]
-        if dist_to_trap<=threshold_distance:
+        if dist_to_trap<=control_parameters['movement_threshold']:
             control_parameters['traps_occupied'][trap_index] = True
             # TODO remove the unused particles
 
@@ -557,7 +557,10 @@ def trap_occupied(distances,trap_index,threshold_distance=50):
     return None
 def check_all_traps(distances=None):
     '''
-    Updates all traps to see if they are occupied
+    Updates all traps to see if they are occupied.
+    Returns the indices of the particles which are trapped. Indices refers to their
+    position in the control_parameters['particle_centers'] array.
+    Returns an empty array if there are no trapped particles
     '''
     if distances is None:
         distances = get_particle_trap_distances()
@@ -570,36 +573,33 @@ def check_all_traps(distances=None):
 def find_closest_unoccupied():
     '''
     Function for finding the paricle and (unoccupied) trap which are the closest
-
-    Returns : min_index_trap,min_index_particle,min_distance
-
+    Returns : min_index_trap,min_index_particle.
+        Index of the untrapped particle closest to an unoccupied trap.
     '''
 
     distances = get_particle_trap_distances()
     trapped_particles = check_all_traps(distances)
-    distances[:,trapped_particles] = 1e6 # These indices are not ok
+    distances[:,trapped_particles] = 1e6 # These indices are not ok, put them very large
     print("trapped particles",trapped_particles,'Distances',distances,'traps occupied',control_parameters['traps_occupied'])
 
-    min_distance = 2000
+    min_distance = 2000 # If the particle is not within 2000 pixels then it is not within the frame
     min_index_particle = None # Index of particle which is closes to an unoccupied trap
     min_index_trap = None # Index of unoccupied trap which is closest to a particle
 
+    # Check all the traps
     for trap_idx in range(len(control_parameters['traps_occupied'])):
         trapped = control_parameters['traps_occupied'][trap_idx]
-        if not trapped:
 
-            particle_idx = np.argmin(distances[trap_idx]) #TODO  Will not work as intended
-            if distances[trap_idx,particle_idx]<min_distance and particle_idx:
-                min_distance = distances[trap_idx][particle_idx]
+        # If there is not a particle trapped in the trap check for the closest particle
+        if not trapped:
+            particle_idx = np.argmin(distances[trap_idx])
+
+            # If particle is within the threshold then update min_index and trap index as well as min distance
+            if distances[trap_idx,particle_idx]<min_distance:
+                min_distance = distances[trap_idx,particle_idx]
                 min_index_trap = trap_idx
                 min_index_particle = particle_idx
 
-    '''# Todo rewrite this function in a sexier way
-    indices = [i for i in range(len(control_parameters['traps_occupied'])) if not control_parameters['traps_occupied']]
-    tmp = 1e6*np.ones((np.shape(distances)))
-    tmp[indices] = distances[indices]
-    return ind = np.unravel_index(np.argmin(tmp, axis=None), np.shape(tmp))
-    '''
     return min_index_trap,min_index_particle
 def move_button(move_direction):
     '''
