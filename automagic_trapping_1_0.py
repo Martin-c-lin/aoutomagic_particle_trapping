@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 # from keras.models import load_model # Not curently in use
 import threading,time,cv2,queue,copy,sys,tkinter,os
-from tkinter import messagebox,RIGHT,LEFT
+from tkinter import messagebox
 from functools import partial
 import datetime
 from cv2 import VideoWriter, VideoWriter_fourcc
@@ -39,6 +39,7 @@ def get_default_control_parameters(recording_path=None):
     'new_AOI_display': False,
     'movement_threshold': 30,
     'record':False,
+    'tracking_on':True,
     'target_temperature':25,
 
     'traps_absolute_pos':[[921,921],[680,537]], #[500,500],# Change to aritrary number of traps
@@ -366,72 +367,31 @@ class TrackingThread(threading.Thread):
        global control_parameters
        # network1 = load_model(control_parameters['network_path']+'network1.h5')
        # network2 = load_model(control_parameters['network_path']+'network_101x101_2.h5')
-       i = 0
        zoom_counter = 0
        while control_parameters['continue_capture']: # Change to continue tracking?
-           if not control_parameters['zoomed_in']:
-               '''
-               We are in full frame mode looking for a particle
-               '''
-               x,y = fpt.find_particle_centers(copy.copy(image),
-                                                threshold=control_parameters['particle_threshold'],
-                                                particle_size_threshold=control_parameters['particle_size_threshold'],
-                                                bright_particle=control_parameters['bright_particle'])
-               control_parameters['particle_centers'] = [x,y]
 
-               # Find the closest particles
-               if len(x)>0: # Check that there are particles present
-                   # Todo add motor lock here?
-                   min_index_trap,min_index_particle = find_closest_unoccupied()
-                   if min_index_particle is not None:
-                       control_parameters['target_trap_pos'] = [control_parameters['traps_relative_pos'][0][min_index_trap],control_parameters['traps_relative_pos'][1][min_index_trap]]
-                       control_parameters['target_particle_center'] = [control_parameters['particle_centers'][0][min_index_particle],control_parameters['particle_centers'][1][min_index_particle]]
-               else:
-                   control_parameters['target_particle_center'] = []
-                   #print('No particles in frame!')
+            if control_parameters['tracking_on']:
+               if not control_parameters['zoomed_in']:
+                   '''
+                   We are in full frame mode looking for a particle
+                   '''
+                   x,y = fpt.find_particle_centers(copy.copy(image),
+                                                    threshold=control_parameters['particle_threshold'],
+                                                    particle_size_threshold=control_parameters['particle_size_threshold'],
+                                                    bright_particle=control_parameters['bright_particle'])
+                   control_parameters['particle_centers'] = [x,y]
 
-           #     #control_parameters['particle_centers'][0],control_parameters['particle_centers'][1],picture = fpt.find_single_particle_center(copy.copy(image),threshold = 200) # Do we need a copy of this or move it to another thread?s
-           #     # TODO, change the zoom in function
-           #     if is_trapped_single():
-           #         '''
-           #         We are not zoomed in but have found a particle.
-           #         Time to zoom in on it.
-           #         '''
-           #         control_parameters['zoomed_in'] =  True
-           #         half_image_width = 50
-           #         control_parameters['movement_threshold'] = 10
-           #         set_AOI(half_image_width=half_image_width)
-           # elif control_parameters['zoomed_in']:
-           #     '''
-           #     We are in zoomed in mode ready to predict the position using a network
-           #     '''
-           #     # predict_particle_position(network2,print_position=False) # Network cannot yet be trusted. Was fit to differen objectve magnification
-           #     #control_parameters['particle_centers'][0],control_parameters['particle_centers'][1],picture = fpt.find_single_particle_center(copy.copy(image),threshold = 200)
-           #
-           #     x,y = fpt.find_particle_centers(copy.copy(image),
-           #                                     threshold=control_parameters['particle_threshold'],
-           #                                     particle_size_threshold=control_parameters['particle_size_threshold'],
-           #                                     bright_particle=control_parameters['bright_particle'])
-           #     control_parameters['particle_centers'] = [x,y]
-           #     print('Centers are',control_parameters['particle_centers'])
-           #
-           #     if is_trapped_single():
-           #         zoom_counter = 0 # particle is trapped do not want to increase the counter
-           #     else:
-           #        '''
-           #        We are in zoomed in mode but have lost the particle
-           #        '''
-           #        zoom_counter += 1 # Particle might not be trapped, lets wait and see
-           #        if zoom_counter>10:
-           #            #
-           #            control_parameters['zoomed_in'] =  False
-           #            half_image_width = 500
-           #            control_parameters['movement_threshold'] = 20
-           #            set_AOI(half_image_width=half_image_width)
-           #            zoom_counter = 0
-           time.sleep(0.5) # Needed to prevent this thread from running too fast
-           print("Centers are",control_parameters['particle_centers'])
-           i+=1
+                   # Find the closest particles
+                   if len(x)>0: # Check that there are particles present
+                       # Todo add motor lock here?
+                       min_index_trap,min_index_particle = find_closest_unoccupied()
+                       if min_index_particle is not None:
+                           control_parameters['target_trap_pos'] = [control_parameters['traps_relative_pos'][0][min_index_trap],control_parameters['traps_relative_pos'][1][min_index_trap]]
+                           control_parameters['target_particle_center'] = [control_parameters['particle_centers'][0][min_index_particle],control_parameters['particle_centers'][1][min_index_particle]]
+                   else:
+                       control_parameters['target_particle_center'] = []
+               print("Centers are",control_parameters['particle_centers'])
+            time.sleep(0.1) # Needed to prevent this thread from running too fast
 def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
     '''
     Function for changing the Area Of Interest for the camera to the box specified by
@@ -648,6 +608,8 @@ def toggle_bright_particle():
 def set_particle_threshold():
     threshold=control_parameters['particle_threshold'] = threshold
     return
+def toggle_tracking():
+    control_parameters['tracking_on'] = not control_parameters['tracking_on']
 ############### Main script starts here ####################################
 '''
 # Simple test  which can be run without motors
@@ -695,6 +657,7 @@ control_parameters['continue_capture'] = False # All threds exits their main loo
 control_parameters['motor_running'] = False
 
 # Shut down camera and motors safely
+terminate_threads()
 cam.close()
 
 TM.DisconnectMotor(motor_X)
