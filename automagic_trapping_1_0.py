@@ -37,18 +37,18 @@ def get_default_control_parameters(recording_path=None):
     'AOI':[0,1000,0,1000],
     'new_AOI_camera': False,
     'new_AOI_display': False,
-    'movement_threshold': 40,
+    'movement_threshold': 30,
     'record':False,
     'target_temperature':25,
 
-    'traps_absolute_pos':[[500],[500]], #[500,500],# Change to aritrary number of traps
-    'traps_relative_pos': [[500],[500]], #[500,500],
+    'traps_absolute_pos':[[921,921],[680,537]], #[500,500],# Change to aritrary number of traps
+    'traps_relative_pos': [[921,921],[680,537]], #[500,500],
     'particle_centers': [[500],[500]], #[400,400],
     'target_particle_center':[500,500], # Position of the particle we currently are trying to trap
     # Used to minimize changes in code when updating to multiparticle tracking
     'target_trap_pos':[500,500],# Position of the trap we currently are trying to trap in
     'particle_threshold':120,
-    'particle_size_threshold':100, # Parcticle detection threshold
+    'particle_size_threshold':200, # Parcticle detection threshold
     'bright_particle':True, # Is particle brighter than the background?
     'jog_motor_in_direction':[False,False,False,False],
     # # TODO, make this from the number of traps
@@ -100,6 +100,7 @@ def start_threads():
     thread_list.append(slm_thread)
     # thread_list.append(temperature_thread)
 def create_buttons(top):
+    global control_parameters
     exit_button = tkinter.Button(top, text ='Exit program', command = terminate_threads)
     #start_button = tkinter.Button(top, text ='Start program', command = start_threads)
     up_button = tkinter.Button(top, text ='Move up', command = partial(move_button,0))
@@ -109,6 +110,21 @@ def create_buttons(top):
     start_record_button = tkinter.Button(top, text ='Start recording', command = start_record)
     stop_record_button = tkinter.Button(top, text ='Stop recording', command = stop_record)
     toggle_bright_particle_button = tkinter.Button(top, text ='Toggle particle brightness', command = toggle_bright_particle)
+    threshold_entry = tkinter.Entry(top, bd =5)
+
+    def set_threhold():
+        entry = threshold_entry.get()
+        try:
+            threshold = int(entry)
+            if 0<threshold<255:
+                control_parameters['particle_threshold'] = threshold
+                print("Threshold set to ",threshold)
+            else:
+                print('Threshold out of bounds')
+        except:
+            print('Cannot convert entry to integer')
+        threshold_entry.delete(0,last=5000)
+    threshold_button = tkinter.Button(top, text ='Set threshold', command = set_threhold)
     # Idea - Use radiobutton for the toggle
     # TODO add button for zoom in
     x_position = 1020
@@ -121,6 +137,8 @@ def create_buttons(top):
     start_record_button.place(x=x_position, y=250)
     stop_record_button.place(x=x_position, y=290)
     toggle_bright_particle_button.place(x=x_position, y=330)
+    threshold_entry.place(x=x_position,y=400)
+    threshold_button.place(x=x_position+100,y=400)
 class SLMThread(threading.Thread):
     def __init__(self,threadID,name):
         threading.Thread.__init__(self)
@@ -161,20 +179,14 @@ class TkinterDisplay:
          self.window = window
          self.window.title(window_title)
 
-         # open video source (by default this will try to open the computer webcam)
-         #self.vid = MyVideoCapture()
-
          # Create a canvas that can fit the above video source size
          self.canvas = tkinter.Canvas(window, width = 1000, height = 1000)
-         #self.canvas.grid(column=0,row=2)
          self.canvas.place(x=0, y=0)
-         #self.canvas.pack(side=LEFT)
 
          # Button that lets the user take a snapshot
          self.btn_snapshot=tkinter.Button(window, text="Snapshot", width=50, command=self.snapshot)
          self.btn_snapshot.place(x=1100, y=0)
          create_buttons(self.window)
-         # TODO Add all the buttons
          self.window.geometry('1500x1000')
          # After it is called once, the update method will be automatically called every delay milliseconds
          self.delay = 50
@@ -371,8 +383,9 @@ class TrackingThread(threading.Thread):
                if len(x)>0: # Check that there are particles present
                    # Todo add motor lock here?
                    min_index_trap,min_index_particle = find_closest_unoccupied()
-                   control_parameters['target_trap_pos'] = [control_parameters['traps_relative_pos'][0][min_index_trap],control_parameters['traps_relative_pos'][1][min_index_trap]]
-                   control_parameters['target_particle_center'] = [control_parameters['particle_centers'][0][min_index_particle],control_parameters['particle_centers'][1][min_index_particle]]
+                   if min_index_particle is not None:
+                       control_parameters['target_trap_pos'] = [control_parameters['traps_relative_pos'][0][min_index_trap],control_parameters['traps_relative_pos'][1][min_index_trap]]
+                       control_parameters['target_particle_center'] = [control_parameters['particle_centers'][0][min_index_particle],control_parameters['particle_centers'][1][min_index_particle]]
                else:
                    control_parameters['target_particle_center'] = []
                    #print('No particles in frame!')
@@ -416,7 +429,8 @@ class TrackingThread(threading.Thread):
            #            control_parameters['movement_threshold'] = 20
            #            set_AOI(half_image_width=half_image_width)
            #            zoom_counter = 0
-           time.sleep(0.15) # Needed to prevent this thread from running too fast
+           time.sleep(0.5) # Needed to prevent this thread from running too fast
+           print("Centers are",control_parameters['particle_centers'])
            i+=1
 def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
     '''
@@ -519,7 +533,7 @@ def get_particle_trap_distances():
         for j in range(nbr_particles):
             dx = (control_parameters['traps_relative_pos'][0][i]-control_parameters['particle_centers'][0][j])
             dy = (control_parameters['traps_relative_pos'][1][i]-control_parameters['particle_centers'][1][j])
-            distances[i][j] = np.sqrt(dx*dx+dy*dy)
+            distances[i,j] = np.sqrt(dx*dx+dy*dy)
             #distances[i][j] = np.sqrt((control_parameters['traps_relative_pos'][0][i]-control_parameters['particle_centers'][0][j])**2+(control_parameters['traps_relative_pos'][1][i]-control_parameters['particle_centers'][1][j])**2)
     return distances
 def trap_occupied(distances,trap_index,threshold_distance=50):
@@ -532,21 +546,27 @@ def trap_occupied(distances,trap_index,threshold_distance=50):
     if trap_index>len(distances) or trap_index>len(control_parameters['traps_occupied']):
         print('Trap index out of range')
         return
-    for dist_to_trap in distances[trap_index]:
+    for i in range(len(distances[trap_index,:])):
+        dist_to_trap = distances[trap_index,i]
         if dist_to_trap<=threshold_distance:
             control_parameters['traps_occupied'][trap_index] = True
-            return
+            # TODO remove the unused particles
+
+            return i
     control_parameters['traps_occupied'][trap_index] = False
-    return
+    return None
 def check_all_traps(distances=None):
     '''
     Updates all traps to see if they are occupied
     '''
     if distances is None:
         distances = get_particle_trap_distances()
-
+    trapped_particle_indices = []
     for trap_index in range(len(distances)):
-        trap_occupied(distances,trap_index)
+        trapped_particle_index = trap_occupied(distances,trap_index)
+        if trapped_particle_index is not None:
+            trapped_particle_indices.append(trapped_particle_index)
+    return trapped_particle_indices
 def find_closest_unoccupied():
     '''
     Function for finding the paricle and (unoccupied) trap which are the closest
@@ -556,18 +576,20 @@ def find_closest_unoccupied():
     '''
 
     distances = get_particle_trap_distances()
-    check_all_traps(distances)
+    trapped_particles = check_all_traps(distances)
+    distances[:,trapped_particles] = 1e6 # These indices are not ok
+    print("trapped particles",trapped_particles,'Distances',distances,'traps occupied',control_parameters['traps_occupied'])
 
-
-    min_distance = 20
-    min_index_particle = 0 # Index of particle which is closes to an unoccupied trap
-    min_index_trap = 0 # Index of unoccupied trap which is closest to a particle
+    min_distance = 2000
+    min_index_particle = None # Index of particle which is closes to an unoccupied trap
+    min_index_trap = None # Index of unoccupied trap which is closest to a particle
 
     for trap_idx in range(len(control_parameters['traps_occupied'])):
         trapped = control_parameters['traps_occupied'][trap_idx]
         if not trapped:
-            particle_idx = np.argmin(distances[trap_idx])
-            if distances[trap_idx][particle_idx]<min_distance:
+
+            particle_idx = np.argmin(distances[trap_idx]) #TODO  Will not work as intended
+            if distances[trap_idx,particle_idx]<min_distance and particle_idx:
                 min_distance = distances[trap_idx][particle_idx]
                 min_index_trap = trap_idx
                 min_index_particle = particle_idx
@@ -622,7 +644,9 @@ def toggle_bright_particle():
     Function for switching between bright and other particle
     '''
     control_parameters['bright_particle'] = not control_parameters['bright_particle']
+    print("control_parameters['bright_particle'] set to",control_parameters['bright_particle'])
 def set_particle_threshold():
+    threshold=control_parameters['particle_threshold'] = threshold
     return
 ############### Main script starts here ####################################
 '''

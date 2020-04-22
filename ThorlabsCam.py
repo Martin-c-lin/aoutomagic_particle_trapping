@@ -51,7 +51,7 @@ def find_exposure_time(cam,targetIntensity=100,margin=5):
     maxIntensity = mean(Image)
 
     midIntensity=1
-    while (midIntensity<targetIntensity-margin)or(midIntensity>targetIntensity+margin) and counter<100 :
+    while (midIntensity<targetIntensity-margin)or(midIntensity>targetIntensity+margin) and counter<20 :
         # Set exposure, take a picture and check how good it was
         counter=counter+1
 

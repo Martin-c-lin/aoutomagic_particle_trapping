@@ -46,7 +46,7 @@ def get_delta(image_width = 1080,d = 20e-6,d0x=-120e-6,d0y=30e-6):
     z = 0
     lambda_ = 532e-9
 
-    n1 = 3 # point-rows not used now
+    n1 = 2 # point-rows not used now
     n2 = 1  # #point-columns
     # d = 20e-6 # Distance between particles
     # d0x=-120e-6 # From allessandros matlabs script
@@ -59,13 +59,14 @@ def get_delta(image_width = 1080,d = 20e-6,d0x=-120e-6,d0y=30e-6):
 
     zm = np.zeros((n1,n2))
 
+    '''
     for j in range(n1):
         for k in range(n2):
             xm[j,k] = (((-(n1-1)*d/2)+(j)*d)+d0x)
             ym[j,k] = (((-(n2-1)*d/2)+(k)*d)+d0y)
             zm[j,k] = z
 
-
+    '''
     # d=15e-6;
     # dd=1e-7;
     #
@@ -73,14 +74,14 @@ def get_delta(image_width = 1080,d = 20e-6,d0x=-120e-6,d0y=30e-6):
     # TODO change them all into 1d arrays
     xm[0][0] = d0x
     xm[1][0] = d0x
-    xm[2][0] = d0x+0.7*d*np.sqrt(3)
+    #xm[2][0] = d0x+0.7*d*np.sqrt(3)
     ym[0][0] = 0.7*d+d0y
     ym[1][0] = -0.7*d+d0y
-    ym[2][0] = d0y
+    #ym[2][0] = d0y
 
-    zm[0][0] = 1e-7
+    zm[0][0] = 0# You start seein a difference at roughly 1e-10
     zm[1][0] = 0
-    zm[2][0] = 0
+    #zm[2][0] = 2e-10
 
     Delta=np.zeros((M,N))
     for m in range(M):
@@ -90,6 +91,7 @@ def get_delta(image_width = 1080,d = 20e-6,d0x=-120e-6,d0y=30e-6):
         # Delta[m,:]=np.reshape(2*pi*p/lambda_/f*(np.transpose(I)*x*xm[i1,i2]+(y*I)*ym[i1,i2])%(2*pi),(1,N))
 
         # TODO Add z-dependence to to ensuere that this works also in 3d
+        # Can we remove the %2pi and * 2 *pi?
         Delta[m,:]=np.reshape(2*pi*p/lambda_/f*((np.transpose(I)*x*xm[i1,i2]+(y*I)*ym[i1,i2]) + 1/(2*f)*zm[i1,i2] * ( (np.transpose(I)*x)**2 + (y*I)**2 )) % (2*pi),(1,N))
 
     return Delta,N,M
@@ -132,10 +134,3 @@ setup_fullscreen_plt_image()
 plt.imshow(image,cmap='gist_gray')
 plt.pause(1)
 '''
-# for i in range(30):
-#     Delta,N,M = get_delta(image_width,d=i*1e-6)
-#     start = time()
-#     image = np.reshape(GSW(N,M,Delta,image_width,nbr_iterations=0)*255/(2*pi),(image_width,image_width))
-#     plt.imshow(image,cmap='gist_gray')
-#     plt.pause(0.01)
-# plt.show()

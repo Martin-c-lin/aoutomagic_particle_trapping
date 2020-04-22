@@ -3,7 +3,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 import scipy.ndimage as ndi
 from skimage import measure
-
+import time
 def find_single_particle_center(img,threshold=127):
     """
     Locate the center of a single particle in an image.
@@ -14,7 +14,7 @@ def find_single_particle_center(img,threshold=127):
     cy, cx = ndi.center_of_mass(th1)
     # if np.isnan(cx) return inf?
     return cx,cy,th1
-def find_particle_centers(image,threshold=120,particle_size_threshold=100,bright_particle=True):
+def find_particle_centers(image,threshold=120,particle_size_threshold=200,particle_upper_size_threshold=5000,bright_particle=True):
     """
     Function which locates particle centers using thresholding.
     Parameters :
@@ -36,17 +36,17 @@ def find_particle_centers(image,threshold=120,particle_size_threshold=100,bright
 
     # Separate the thresholded image into different sections
     separate_particles_image = measure.label(thresholded_image)
-
+    #cv2.imwrite(str(threshold)+"threshold-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg", cv2.cvtColor(thresholded_image, cv2.COLOR_RGB2BGR))
     # Count the number of pixels in each section
     counts = np.bincount(np.reshape(separate_particles_image,(np.shape(separate_particles_image)[0]*np.shape(separate_particles_image)[1])))
     x = []
     y = []
-    group = 1
+    group = 0
 
     # Check for pixel sections which are larger than particle_size_threshold.
 
-    for pixel_count in counts[1:]: # First will be background
-        if pixel_count>particle_size_threshold:
+    for pixel_count in counts: # First will be background
+        if particle_upper_size_threshold>pixel_count>particle_size_threshold:
 
             # Particle found, locate center of mass of the particle
             cy, cx = ndi.center_of_mass(separate_particles_image==group)
