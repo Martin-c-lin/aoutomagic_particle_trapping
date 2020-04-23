@@ -34,14 +34,24 @@ class PiezoMotor():
         self.channel = channel
         self.timeout = timeout
     def move_to_position(self,position):
+        # Moves motor to a specified position
         try:
             self.motor.MoveTo(self.channel,position,self.timeout)
         except:
             print('Could not move to target position')
+    def set_timeout(self,timeout):
+        if timeout>=1:
+            self.timeout = timeout
+        else:
+            print("Timeout NOK")
+    def get_timeout(self):
+        return self.timeout
     def move_relative(self,distance):
+        # Moves the piezo a fixed distance
         target_position = self.get_position()+distance
         self.move_to_position(target_position)
     def get_position(self):
+        # Returns current position of motor
         return self.motor.GetPoisition(self.channel)
     def __del__(self):
         self.motor.StopPolling()
@@ -62,23 +72,19 @@ def InitiatePiezoMotor(serialNumber,pollingRate=250):
             else:
                 print("Cannot connect to device.\n Please ensure that the device is connected to your computer and not in use in any other program!")
     motor.WaitForSettingsInitialized(5000)
-    deviceInfo = motor.GetDeviceInfo()
-    print(deviceInfo,'\n')
     # configure the stage
     motorSettings = motor.GetInertialMotorConfiguration(serialNumber)
     motorSettings.DeviceSettingsName = 'PIA'
     # update the RealToDeviceUnit converter
     motorSettings.UpdateCurrentConfiguration()
     # push the settings down to the device
-    #MotorDeviceSettings = motor.MotorDeviceSettings
     currentDeviceSettings = ThorlabsInertialMotorSettings.GetSettings(motorSettings);
-    # TODO specify channel 1
-    motor.SetSettings(currentDeviceSettings, True, False) # What does tru/false mean here?
-    # Start polling the device
-    motor.StartPolling(pollingRate)
 
+    motor.SetSettings(currentDeviceSettings, True, False) # What does tru/false mean here?
+    # Start polling and enable the device
+    motor.StartPolling(pollingRate)
     motor.EnableDevice()
-    #motor.SetJogVelocityParams(Decimal(0.01),Decimal(0.01)) # Jogging parameters set to minimum
+
     return motor
 
 def InitiateMotor(serialNumber,pollingRate=250):
