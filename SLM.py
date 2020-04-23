@@ -46,18 +46,22 @@ def get_delta(image_width = 1080,d = 20e-6,d0x=-120e-6,d0y=30e-6):
     z = 0
     lambda_ = 532e-9
 
-    n1 = 2 # point-rows not used now
+    n1 = 3 # point-rows not used now
     n2 = 1  # #point-columns
     # d = 20e-6 # Distance between particles
     # d0x=-120e-6 # From allessandros matlabs script
     # d0y=30e-6
-    M = n1*n2 # Total number of particles
+    M = 3#n1*n2 # Total number of particles
 
+    xm = np.zeros((M))
+    ym = np.zeros((M))
 
-    xm = np.zeros((n1,n2))
-    ym = np.zeros((n1,n2))
+    zm = np.zeros((M))
 
-    zm = np.zeros((n1,n2))
+    # xm = np.zeros((n1,n2))
+    # ym = np.zeros((n1,n2))
+    #
+    # zm = np.zeros((n1,n2))
 
     '''
     for j in range(n1):
@@ -72,27 +76,40 @@ def get_delta(image_width = 1080,d = 20e-6,d0x=-120e-6,d0y=30e-6):
     #
     # Define the trap positions
     # TODO change them all into 1d arrays
-    xm[0][0] = d0x
-    xm[1][0] = d0x
-    #xm[2][0] = d0x+0.7*d*np.sqrt(3)
-    ym[0][0] = 0.7*d+d0y
-    ym[1][0] = -0.7*d+d0y
-    #ym[2][0] = d0y
+    # xm[0][0] = d0x
+    # xm[1][0] = d0x
+    # xm[2][0] = d0x-0.7*d*np.sqrt(3)
+    # ym[0][0] = 0.7*d+d0y
+    # ym[1][0] = -0.7*d+d0y
+    # ym[2][0] = d0y
+    #
+    # zm[0][0] = 0# You start seein a difference at roughly 1e-10
+    # zm[1][0] = 0
+    # zm[2][0] = 0
+    xm[0] = d0x
+    xm[1] = d0x
+    xm[2] = d0x+0.7*d*np.sqrt(3)
+    ym[0] = 0.7*d+d0y
+    ym[1] = -0.7*d+d0y
+    ym[2] = d0y
 
-    zm[0][0] = 0# You start seein a difference at roughly 1e-10
-    zm[1][0] = 0
-    #zm[2][0] = 2e-10
+    zm[0] = 0# You start seein a difference at roughly 1e-10
+    zm[1] = 0
+    zm[2] = 0
 
     Delta=np.zeros((M,N))
     for m in range(M):
+
+
         # Calculate delta according to eq : in paper
         # Using python "%" instead of Matlabs "rem"
-        i2,i1 = divmod(m,n1)
+        Delta[m,:]=np.reshape(2*pi*p/lambda_/f*((np.transpose(I)*x*xm[m]+(y*I)*ym[m]) + 1/(2*f)*zm[m] * ( (np.transpose(I)*x)**2 + (y*I)**2 )) % (2*pi),(1,N))
+        #i2,i1 = divmod(m,n1)
         # Delta[m,:]=np.reshape(2*pi*p/lambda_/f*(np.transpose(I)*x*xm[i1,i2]+(y*I)*ym[i1,i2])%(2*pi),(1,N))
 
         # TODO Add z-dependence to to ensuere that this works also in 3d
         # Can we remove the %2pi and * 2 *pi?
-        Delta[m,:]=np.reshape(2*pi*p/lambda_/f*((np.transpose(I)*x*xm[i1,i2]+(y*I)*ym[i1,i2]) + 1/(2*f)*zm[i1,i2] * ( (np.transpose(I)*x)**2 + (y*I)**2 )) % (2*pi),(1,N))
+        #Delta[m,:]=np.reshape(2*pi*p/lambda_/f*((np.transpose(I)*x*xm[i1,i2]+(y*I)*ym[i1,i2]) + 1/(2*f)*zm[i1,i2] * ( (np.transpose(I)*x)**2 + (y*I)**2 )) % (2*pi),(1,N))
 
     return Delta,N,M
 def setup_fullscreen_plt_image():

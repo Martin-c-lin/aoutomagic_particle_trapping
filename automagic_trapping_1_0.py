@@ -13,19 +13,21 @@ from functools import partial
 import datetime
 from cv2 import VideoWriter, VideoWriter_fourcc
 import PIL.Image, PIL.ImageTk
+
 def get_default_control_parameters(recording_path=None):
     # TODO : change this into a class
     if recording_path == None:
         now = datetime.datetime.now()
-        recording_path = 'F:/Martin/D'+str(now.year)+'-'+str(now.month)+'-'+str(now.day)+'_T'+str(now.hour)+'_'+str(now.minute)
+        recording_path = 'F:/Martin/D'+str(now.year)+'-'+str(now.month)+'-'+str(now.day)
         try:
             os.mkdir(recording_path)
         except:
             print('Directory already exist')
     control_parameters = {
-    'trapped_counter': 0, # Maybe does not need to be here
     'serial_num_X': '27502438',
     'serial_num_Y': '27502419',
+    'serial_no_piezo':'97100532',
+    'channel':1,
     'network_path': 'C:/Martin/Networks/',
     'recording_path':recording_path,
     'polling_rate': 100,
@@ -34,24 +36,27 @@ def get_default_control_parameters(recording_path=None):
     'zoomed_in': False, # Keeps track of whether the image is cropped or not
     'record': False, # Default
     'half_image_width':500, # TODO remove this parameter, should not be needed
-    'AOI':[0,1000,0,1000],
+    'AOI':[0,1200,0,1000],
     'new_AOI_camera': False,
     'new_AOI_display': False,
-    'movement_threshold': 30,
+    'movement_threshold': 40,
     'record':False,
     'tracking_on':True,
     'target_temperature':25,
 
-    'traps_absolute_pos':[[921,921],[680,537]], #[500,500],# Change to aritrary number of traps
-    'traps_relative_pos': [[921,921],[680,537]], #[500,500],
+    'traps_absolute_pos':[[923,925,1048],[650,506,583]], #[500,500],# Change to aritrary number of traps
+    'traps_relative_pos':[[923,925,1048],[650,506,583]], #[500,500],
     'particle_centers': [[500],[500]], #[400,400],
     'target_particle_center':[500,500], # Position of the particle we currently are trying to trap
     # Used to minimize changes in code when updating to multiparticle tracking
     'target_trap_pos':[500,500],# Position of the trap we currently are trying to trap in
+    'motor_movements':[0,0], # How much x and y motor should be moved
+    'z_starting_position':0, # Where the experiments starts in z position
+    'z_movement':0, # Target z-movement in "ticks" positive for up, negative for down
     'particle_threshold':120,
     'particle_size_threshold':200, # Parcticle detection threshold
     'bright_particle':True, # Is particle brighter than the background?
-    'jog_motor_in_direction':[False,False,False,False],
+    'jog_motor_in_direction':[False,False,False,False], # TODO Remove this thiug
     # # TODO, make this from the number of traps
     'camera_lock': threading.Lock(),
     'motor_locks': [threading.Lock(),threading.Lock()]
@@ -81,17 +86,19 @@ def start_threads():
     global thread_list
     # global temperature_controller
     camera_thread = CameraThread(1, 'Thread-camera')
-    motor_X_thread = MotorThread(2,'Thread-motorX',motor_X,0) # Last argument is to indicate that it is the x-motor and not the y
-    motor_Y_thread = MotorThread(3,'Thread-motorY',motor_Y,1)
+    motor_X_thread = MotorThread(2,'Thread-motorX',0) # Last argument is to indicate that it is the x-motor and not the y
+    motor_Y_thread = MotorThread(3,'Thread-motorY',1)
     slm_thread =SLMThread(4,'Thread-SLM')
     tracking_thread = TrackingThread(5,'Tracker_thread')
     #temperature_thread = TemperatureThread(6,'Temperature_thread')
+    z_movement_thread(6, 'z-thread',serial_no=control_parameters['serial_no_piezo'],channel=control_parameters['channel'])
 
     camera_thread.start()
     motor_X_thread.start()
     motor_Y_thread.start()
     tracking_thread.start()
     slm_thread.start()
+    z_movement_thread.start()
     # temperature_thread.start()
     print('Camera, SLM, tracking, motor_X and motor_Y threads created')
     # thread_list.append(temperature_thread)
@@ -100,6 +107,7 @@ def start_threads():
     thread_list.append(motor_Y_thread)
     thread_list.append(tracking_thread)
     thread_list.append(slm_thread)
+    thread_list.append(z_movement_thread)
 def create_buttons(top):
     global control_parameters
     exit_button = tkinter.Button(top, text ='Exit program', command = terminate_threads)
@@ -112,7 +120,7 @@ def create_buttons(top):
     stop_record_button = tkinter.Button(top, text ='Stop recording', command = stop_record)
     toggle_bright_particle_button = tkinter.Button(top, text ='Toggle particle brightness', command = toggle_bright_particle)
     threshold_entry = tkinter.Entry(top, bd =5)
-
+    toggle_tracking_button = tkinter.Button(top, text ='Toggle particle tracking', command = toggle_tracking)
     def set_threhold():
         entry = threshold_entry.get()
         try:
@@ -128,7 +136,7 @@ def create_buttons(top):
     threshold_button = tkinter.Button(top, text ='Set threshold', command = set_threhold)
     # Idea - Use radiobutton for the toggle
     # TODO add button for zoom in
-    x_position = 1020
+    x_position = 1220
     exit_button.place(x=x_position, y=50)
     #start_button.place(x=x_position, y=50)
     up_button.place(x=x_position, y=90)
@@ -140,6 +148,7 @@ def create_buttons(top):
     toggle_bright_particle_button.place(x=x_position, y=330)
     threshold_entry.place(x=x_position,y=400)
     threshold_button.place(x=x_position+100,y=400)
+    toggle_tracking_button.place(x=x_position,y=440)
 class SLMThread(threading.Thread):
     def __init__(self,threadID,name):
         threading.Thread.__init__(self)
@@ -153,7 +162,7 @@ class SLMThread(threading.Thread):
         SLM.setup_fullscreen_plt_image()
         plt.imshow(SLM_image,cmap='gist_gray')
         while control_parameters['continue_capture']:
-            plt.pause(5)
+            plt.pause(50000)
 class TemperatureThread(threading.Thread):
         '''
         Class for running the temperature controller in the background
@@ -181,12 +190,12 @@ class TkinterDisplay:
          self.window.title(window_title)
 
          # Create a canvas that can fit the above video source size
-         self.canvas = tkinter.Canvas(window, width = 1000, height = 1000)
+         self.canvas = tkinter.Canvas(window, width = 1200, height = 1000)
          self.canvas.place(x=0, y=0)
 
          # Button that lets the user take a snapshot
          self.btn_snapshot=tkinter.Button(window, text="Snapshot", width=50, command=self.snapshot)
-         self.btn_snapshot.place(x=1100, y=0)
+         self.btn_snapshot.place(x=1300, y=0)
          create_buttons(self.window)
          self.window.geometry('1500x1000')
          # After it is called once, the update method will be automatically called every delay milliseconds
@@ -198,12 +207,17 @@ class TkinterDisplay:
     def snapshot(self):
          global image
          global control_parameters
-         cv2.imwrite(get_control_parameters['recording_path']+"/frame-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+         cv2.imwrite(control_parameters['recording_path']+"/frame-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
 
     def update(self):
          # Get a frame from the video source
          global image
-         #TODO? Might wanna do some rescaling of the image so we can zoom in
+         # global control_parameters
+         # #TODO? Might wanna do some rescaling of the image so we can zoom in
+
+         # tmp_image = fpt.threshold_image(copy.copy(image),
+         #                                  threshold=control_parameters['particle_threshold'],
+         #                                  bright_particle=control_parameters['bright_particle'])
          self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(image))
          self.canvas.create_image(0, 0, image = self.photo, anchor = tkinter.NW) # need to use a compatible image type
 
@@ -258,40 +272,83 @@ class MotorThread(threading.Thread):
     '''
     Thread in which a motor is controlled. The motor object is available globally.
     '''
-    def __init__(self, threadID, name,motor,axis):
+    def __init__(self, threadID, name,axis):
+
       threading.Thread.__init__(self)
+      global control_parameters
       self.threadID = threadID
       self.name = name
-      self.motor = motor
       self.axis = axis # 0 = x-axis, 1 = y axis
+      if self.axis==0:
+          self.motor = TM.InitiateMotor(control_parameters['serial_num_X'],pollingRate=control_parameters['polling_rate'])
+      elif self.axis==1:
+          self.motor = TM.InitiateMotor(control_parameters['serial_num_Y'],pollingRate=control_parameters['polling_rate'])
+      else:
+          print('Invalid choice of axis, no motor available')
+
       self.setDaemon(True)
     def run(self):
        print('Running motor thread')
        global control_parameters
        while control_parameters['motor_running']:
-           # Acquire lock to ensure that it is safe to move the motor
-           control_parameters['motor_locks'][self.axis].acquire()
+            # Acquire lock to ensure that it is safe to move the motor
+            control_parameters['motor_locks'][self.axis].acquire()
 
-           # Check if user is jogging the motor
-           if control_parameters['jog_motor_in_direction'][self.axis*2]:
+            # Check if user is jogging the motor
+            if control_parameters['jog_motor_in_direction'][self.axis*2]:
                TM.MoveMotor(self.motor,0.03)
                control_parameters['jog_motor_in_direction'][self.axis*2] = False
                print("User jogging motor")
-           if control_parameters['jog_motor_in_direction'][self.axis*2+1]:
+            elif control_parameters['jog_motor_in_direction'][self.axis*2+1]:
                TM.MoveMotor(self.motor,-0.03)
                control_parameters['jog_motor_in_direction'][self.axis*2+1] = False
                print("User jogging motor")
-           # Check that there is a target particle and if so where to move
-           elif len(control_parameters['target_particle_center'])>0:
+            # Check that there is a target particle and if so where to move
+
+            elif np.abs(control_parameters['motor_movements'][self.axis]):
+                TM.MoveMotorPixels(self.motor,control_parameters['motor_movements'][self.axis])
+                control_parameters['motor_movements'][self.axis] = 0
+            '''
+            elif len(control_parameters['target_particle_center'])>0:
                if np.abs(control_parameters['target_particle_center'][self.axis]-control_parameters['target_trap_pos'][self.axis])>=control_parameters['movement_threshold']:
                     maxPixel = np.abs(control_parameters['AOI'][1]-control_parameters['AOI'][0])
                     TM.MoveMotorToPixel(self.motor ,targetPixel=control_parameters['target_particle_center'][self.axis],currentPixel=control_parameters['target_trap_pos'][self.axis],maxPixel=maxPixel)
-           control_parameters['motor_locks'][self.axis].release()
-           time.sleep(0.1) # To give other threads some time to work
-       return
+            '''
+            control_parameters['motor_locks'][self.axis].release()
+            time.sleep(0.1) # To give other threads some time to work
+
+       TM.DisconnectMotor(self.motor)
+class z_movement_thread(threading.Thread):
+    '''
+    Thread for controling movement of the objective in z-direction
+    '''
+    def __init__(self, threadID, name,serial_no,channel,polling_rate=250):
+        threading.Thread.__init__(self)
+        global control_parameters
+        self.threadID = threadID
+        self.name = name
+        self.piezo = TM.PiezoMotor(serial_no,channel=channel,pollingRate=polling_rate)
+        control_parameters['z_starting_position'] = self.piezo.get_position()
+        self.setDaemon(True)
+    def run(self):
+        global control_parameters
+
+        while control_parameters['motor_running']:
+
+            # Check if the objective should be moved
+            if control_parameters['z_movement'] is not 0:
+                try:
+                    control_parameters['z_movement'] = int(control_parameters['z_movement'])
+                    self.piezo.move_relative(control_parameters['z_movement'])
+                    control_parameters['z_movement'] = 0
+                except:
+                    print('Cannot move objective to',control_parameters['z_movement'] )
+                    print('Resetting target z movement.')
+                    control_parameters['z_movement'] = 0
+            time.sleep(0.2)
+        self.piezo.move_to_position(control_parameters['z_starting_position'])
 class CameraThread(threading.Thread):
    def __init__(self, threadID, name,batch_size=100):
-      # TODO add camera here
       threading.Thread.__init__(self)
       self.threadID = threadID
       self.name = name
@@ -303,7 +360,6 @@ class CameraThread(threading.Thread):
        image_count = 0
        number_images_saved = 0 # counts
        video_created = False
-       video_index = 0 # Number of current video
        # TODO - set framreate so we have a proper framerate in the videos!
        # Also need to record the framerate etc
        global control_parameters
@@ -323,11 +379,12 @@ class CameraThread(threading.Thread):
            # Create an array to store the images which have been captured in
            saved_images = np.zeros([self.batch_size ,np.abs(control_parameters['AOI'][0]-control_parameters['AOI'][1]),np.abs(control_parameters['AOI'][3]-control_parameters['AOI'][2])])
            if not video_created:
+               now = datetime.datetime.now()
                fourcc = VideoWriter_fourcc(*'MP42')
                image_width = control_parameters['AOI'][1]-control_parameters['AOI'][0]
-               video = VideoWriter(control_parameters['recording_path']+'/moive'+str(video_index)+'.avi', fourcc, float(20), (image_width, image_width),isColor=False)
+               image_height = control_parameters['AOI'][3]-control_parameters['AOI'][2]
+               video = VideoWriter(control_parameters['recording_path']+'/moive-'+str(now.hour)+'-'+str(now.minute)+'-'+str(now.second)+'.avi', fourcc, float(10), (image_width, image_height),isColor=False)
                video_created = True
-               video_index += 1
            # Start continously capturin images now that the camera parameters have been set
            while control_parameters['continue_capture'] and not control_parameters['new_AOI_camera']:
                cam.wait_for_frame(timeout=None)
@@ -386,12 +443,31 @@ class TrackingThread(threading.Thread):
                        # Todo add motor lock here?
                        min_index_trap,min_index_particle = find_closest_unoccupied()
                        if min_index_particle is not None:
+                           # Get motor locks?
                            control_parameters['target_trap_pos'] = [control_parameters['traps_relative_pos'][0][min_index_trap],control_parameters['traps_relative_pos'][1][min_index_trap]]
                            control_parameters['target_particle_center'] = [control_parameters['particle_centers'][0][min_index_particle],control_parameters['particle_centers'][1][min_index_particle]]
+                           control_parameters['motor_movements'][0] = control_parameters['target_trap_pos'][0] - control_parameters['target_particle_center'][0]
+                           control_parameters['motor_movements'][1] = control_parameters['target_trap_pos'][1] - control_parameters['target_particle_center'][1]
+
+                           # If there is a trapped particle then we do not want to move very far so we accidentally lose it
+                           if True in control_parameters['traps_occupied']:
+                               limit_motor_movement(limit=40)
+                           if not False in control_parameters['traps_occupied']:
+                               print("All the traps have been occupied")
+                               control_parameters['z_movement'] = 20
                    else:
                        control_parameters['target_particle_center'] = []
-               print("Centers are",control_parameters['particle_centers'])
+               #print("Centers are",control_parameters['particle_centers'])
             time.sleep(0.1) # Needed to prevent this thread from running too fast
+def limit_motor_movement(limit=100):
+   if control_parameters['motor_movements'][0]>limit:
+       control_parameters['motor_movements'][0] = limit
+   elif control_parameters['motor_movements'][0]<-limit:
+       control_parameters['motor_movements'][0] = -limit
+   if control_parameters['motor_movements'][1]>limit:
+       control_parameters['motor_movements'][1] = limit
+   elif control_parameters['motor_movements'][1]<-limit:
+       control_parameters['motor_movements'][1] = -limit
 def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
     '''
     Function for changing the Area Of Interest for the camera to the box specified by
@@ -462,21 +538,6 @@ def predict_particle_position(network,half_image_width=50,network_image_width=10
 
     if print_position:
         print('Predicted posiiton is ',control_parameters['particle_centers'])
-def is_trapped_single(threshold_distance=50):
-    '''
-    Function for detemining if a particle has been trapped or not
-    '''
-    global control_parameters
-    distance = np.sqrt((control_parameters['target_particle_center'][0]-control_parameters['traps_relative_pos'][0])**2 + (control_parameters['target_particle_center'][1]-control_parameters['traps_relative_pos'][1])**2)
-
-    if distance<threshold_distance:
-        control_parameters['trapped_counter'] += 1 # TODO put uppper limit on trapped zoom_counter
-        control_parameters['trapped_counter'] = np.minimum(10,control_parameters['trapped_counter'])
-    else:
-        control_parameters['trapped_counter'] -= 1
-    if control_parameters['trapped_counter']<0:
-        control_parameters['trapped_counter']=0
-    return control_parameters['trapped_counter']>=8
 def get_particle_trap_distances():
     '''
     Calcualtes the distance between all particles and traps and returns a distance matrix,
@@ -510,8 +571,6 @@ def trap_occupied(distances,trap_index):
         dist_to_trap = distances[trap_index,i]
         if dist_to_trap<=control_parameters['movement_threshold']:
             control_parameters['traps_occupied'][trap_index] = True
-            # TODO remove the unused particles
-
             return i
     control_parameters['traps_occupied'][trap_index] = False
     return None
@@ -540,7 +599,6 @@ def find_closest_unoccupied():
     distances = get_particle_trap_distances()
     trapped_particles = check_all_traps(distances)
     distances[:,trapped_particles] = 1e6 # These indices are not ok, put them very large
-    print("trapped particles",trapped_particles,'Distances',distances,'traps occupied',control_parameters['traps_occupied'])
 
     min_distance = 2000 # If the particle is not within 2000 pixels then it is not within the frame
     min_index_particle = None # Index of particle which is closes to an unoccupied trap
@@ -610,31 +668,9 @@ def set_particle_threshold():
     return
 def toggle_tracking():
     control_parameters['tracking_on'] = not control_parameters['tracking_on']
+    print("Tracking is ",control_parameters['tracking_on'])
 ############### Main script starts here ####################################
-'''
-# Simple test  which can be run without motors
-control_parameters = get_default_control_parameters(recording_path='test_recording')
-cam = TC.get_camera()
-cam.set_defaults(left=control_parameters['AOI'][0],right=control_parameters['AOI'][1],top=control_parameters['AOI'][2],bot=control_parameters['AOI'][3],n_frames=1)
-exposure_time = TC.find_exposure_time(cam) # automagically finds a decent exposure time
-print('Exposure time = ',exposure_time)
-image = cam.grab_image()
-camera_thread = CameraThread(1, 'Thread-camera')
-thread_list = []
-thread_list.append(camera_thread)
-camera_thread.start()
-print(np.shape(image))
-T_D = TkinterDisplay(tkinter.Tk(), "Control display")
-
-camera_thread.join()
-
-'''
 control_parameters = get_default_control_parameters()
-# Initate contact with motors
-#TODO move these to the threads or not?
-motor_X = TM.InitiateMotor(control_parameters['serial_num_X'],pollingRate=control_parameters['polling_rate'])
-motor_Y = TM.InitiateMotor(control_parameters['serial_num_Y'],pollingRate=control_parameters['polling_rate'])
-
 # Create camera and set defaults
 cam = TC.get_camera()
 cam.set_defaults(left=control_parameters['AOI'][0],right=control_parameters['AOI'][1],top=control_parameters['AOI'][2],bot=control_parameters['AOI'][3],n_frames=1)
@@ -659,8 +695,5 @@ control_parameters['motor_running'] = False
 # Shut down camera and motors safely
 terminate_threads()
 cam.close()
-
-TM.DisconnectMotor(motor_X)
-TM.DisconnectMotor(motor_Y)
 print(thread_list)
 sys.exit()

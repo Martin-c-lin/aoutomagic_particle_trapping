@@ -30,7 +30,7 @@ class PiezoMotor():
     Piezo motor class.
     '''
     def __init__(self,serialNumber,channel,pollingRate=250,timeout=60000):
-        self.motor = InitatePiezoMotor(serialNumber,pollingRate)
+        self.motor = InitiatePiezoMotor(serialNumber,pollingRate)
         self.channel = channel
         self.timeout = timeout
     def move_to_position(self,position):
@@ -52,7 +52,7 @@ class PiezoMotor():
         self.move_to_position(target_position)
     def get_position(self):
         # Returns current position of motor
-        return self.motor.GetPoisition(self.channel)
+        return self.motor.GetPosition(self.channel)
     def __del__(self):
         self.motor.StopPolling()
         self.motor.Disconnect()
@@ -126,6 +126,15 @@ def MoveMotor(motor,distance):
         print("Trying to move too far")
         return False
     motor.SetJogStepSize(Decimal(float(distance))) # For unknown reason python thinks one first must convert to float but only when running from console...
+    try:
+        motor.MoveJog(1,timeoutVal)# Jog in forward direction
+    except:
+        print( "Trying to move motor to NOK position")
+        return False
+    return True
+def MoveMotorPixels(motor,distance,mmToPixel=16140):
+    # Jog motor one step along distance
+    motor.SetJogStepSize(Decimal(float(distance/mmToPixel))) # For unknown reason python thinks one first must convert to float but only when running from console...
     try:
         motor.MoveJog(1,timeoutVal)# Jog in forward direction
     except:
