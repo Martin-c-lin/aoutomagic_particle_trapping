@@ -29,7 +29,7 @@ class PiezoMotor():
     '''
     Piezo motor class.
     '''
-    def __init__(self,serialNumber,channel,pollingRate=250,timeout=60000):
+    def __init__(self,serialNumber,channel,pollingRate=250,timeout=10000):
         self.motor = InitiatePiezoMotor(serialNumber,pollingRate)
         self.channel = channel
         self.timeout = timeout

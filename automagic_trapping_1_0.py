@@ -53,6 +53,7 @@ def get_default_control_parameters(recording_path=None):
     'motor_movements':[0,0], # How much x and y motor should be moved
     'z_starting_position':0, # Where the experiments starts in z position
     'z_movement':0, # Target z-movement in "ticks" positive for up, negative for down
+    'return_z_home':False,
     'particle_threshold':120,
     'particle_size_threshold':200, # Parcticle detection threshold
     'bright_particle':True, # Is particle brighter than the background?
@@ -91,14 +92,14 @@ def start_threads():
     slm_thread =SLMThread(4,'Thread-SLM')
     tracking_thread = TrackingThread(5,'Tracker_thread')
     #temperature_thread = TemperatureThread(6,'Temperature_thread')
-    z_movement_thread(6, 'z-thread',serial_no=control_parameters['serial_no_piezo'],channel=control_parameters['channel'])
+    z_thread = z_movement_thread(6, 'z-thread',serial_no=control_parameters['serial_no_piezo'],channel=control_parameters['channel'])
 
     camera_thread.start()
     motor_X_thread.start()
     motor_Y_thread.start()
     tracking_thread.start()
     slm_thread.start()
-    z_movement_thread.start()
+    z_thread.start()
     # temperature_thread.start()
     print('Camera, SLM, tracking, motor_X and motor_Y threads created')
     # thread_list.append(temperature_thread)
@@ -107,7 +108,7 @@ def start_threads():
     thread_list.append(motor_Y_thread)
     thread_list.append(tracking_thread)
     thread_list.append(slm_thread)
-    thread_list.append(z_movement_thread)
+    thread_list.append(z_thread)
 def create_buttons(top):
     global control_parameters
     exit_button = tkinter.Button(top, text ='Exit program', command = terminate_threads)
@@ -333,19 +334,26 @@ class z_movement_thread(threading.Thread):
     def run(self):
         global control_parameters
 
-        while control_parameters['motor_running']:
+        while control_parameters['continue_capture']:
 
             # Check if the objective should be moved
             if control_parameters['z_movement'] is not 0:
                 try:
                     control_parameters['z_movement'] = int(control_parameters['z_movement'])
-                    self.piezo.move_relative(control_parameters['z_movement'])
+                    # Move up if we are not already up
+                    if self.piezo.get_position()<control_parameters['z_starting_position']+300:
+                        self.piezo.move_relative(control_parameters['z_movement'])
                     control_parameters['z_movement'] = 0
                 except:
                     print('Cannot move objective to',control_parameters['z_movement'] )
                     print('Resetting target z movement.')
                     control_parameters['z_movement'] = 0
+            elif control_parameters['return_z_home']:
+                self.piezo.move_to_position(control_parameters['z_starting_position'])
+                control_parameters['return_z_home'] = False
+                print('homing z')
             time.sleep(0.2)
+
         self.piezo.move_to_position(control_parameters['z_starting_position'])
 class CameraThread(threading.Thread):
    def __init__(self, threadID, name,batch_size=100):
@@ -397,10 +405,6 @@ class CameraThread(threading.Thread):
                if control_parameters['record']:
                    video.write(image)
                    # Try to do this in the background
-                   # saved_images[number_images_saved%self.batch_size ] = copy.copy(image) # Do not want a reference but a copy of its own
-                   # number_images_saved+=1
-                   # if number_images_saved%self.batch_size ==0 and number_images_saved>=1:
-                   #     np.save(control_parameters['recording_path']+'/'+str(number_images_saved-self.batch_size )+'_'+str(number_images_saved),np.uint8(saved_images))
 
            video.release()
 
@@ -452,9 +456,12 @@ class TrackingThread(threading.Thread):
                            # If there is a trapped particle then we do not want to move very far so we accidentally lose it
                            if True in control_parameters['traps_occupied']:
                                limit_motor_movement(limit=40)
-                           if not False in control_parameters['traps_occupied']:
-                               print("All the traps have been occupied")
-                               control_parameters['z_movement'] = 20
+                       if False in control_parameters['traps_occupied']:
+                           control_parameters['return_z_home'] = True
+                       else:
+                           print("All the traps have been occupied")
+                           control_parameters['z_movement'] = 10
+                           control_parameters['return_z_home'] = False
                    else:
                        control_parameters['target_particle_center'] = []
                #print("Centers are",control_parameters['particle_centers'])
