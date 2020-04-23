@@ -211,7 +211,7 @@ class TkinterDisplay:
 class DisplayThread(threading.Thread):
     '''
     Thread class for plotting the result in the BG.
-    InitateMotorreally appreciated by python
+    InitiateMotorreally appreciated by python
     '''
     def __init__(self, threadID, name):
         threading.Thread.__init__(self)
@@ -632,8 +632,8 @@ camera_thread.join()
 control_parameters = get_default_control_parameters()
 # Initate contact with motors
 #TODO move these to the threads or not?
-motor_X = TM.InitateMotor(control_parameters['serial_num_X'],pollingRate=control_parameters['polling_rate'])
-motor_Y = TM.InitateMotor(control_parameters['serial_num_Y'],pollingRate=control_parameters['polling_rate'])
+motor_X = TM.InitiateMotor(control_parameters['serial_num_X'],pollingRate=control_parameters['polling_rate'])
+motor_Y = TM.InitiateMotor(control_parameters['serial_num_Y'],pollingRate=control_parameters['polling_rate'])
 
 # Create camera and set defaults
 cam = TC.get_camera()

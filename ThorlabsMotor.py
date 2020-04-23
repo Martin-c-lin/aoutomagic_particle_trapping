@@ -25,8 +25,28 @@ DeviceManagerCLI.GetDeviceListSize()
 # TODO change this to a class?
 timeoutVal = 30000
 
-
-def InitatePiezoMotor(serialNumber,pollingRate=250):
+class PiezoMotor():
+    '''
+    Piezo motor class.
+    '''
+    def __init__(self,serialNumber,channel,pollingRate=250,timeout=60000):
+        self.motor = InitatePiezoMotor(serialNumber,pollingRate)
+        self.channel = channel
+        self.timeout = timeout
+    def move_to_position(self,position):
+        try:
+            self.motor.MoveTo(self.channel,position,self.timeout)
+        except:
+            print('Could not move to target position')
+    def move_relative(self,distance):
+        target_position = self.get_position()+distance
+        self.move_to_position(target_position)
+    def get_position(self):
+        return self.motor.GetPoisition(self.channel)
+    def __del__(self):
+        self.motor.StopPolling()
+        self.motor.Disconnect()
+def InitiatePiezoMotor(serialNumber,pollingRate=250):
     DeviceManagerCLI.BuildDeviceList()
     DeviceManagerCLI.GetDeviceListSize()
 
@@ -61,7 +81,7 @@ def InitatePiezoMotor(serialNumber,pollingRate=250):
     #motor.SetJogVelocityParams(Decimal(0.01),Decimal(0.01)) # Jogging parameters set to minimum
     return motor
 
-def InitateMotor(serialNumber,pollingRate=250):
+def InitiateMotor(serialNumber,pollingRate=250):
     DeviceManagerCLI.BuildDeviceList()
     DeviceManagerCLI.GetDeviceListSize()
 

@@ -47,7 +47,7 @@ def start_threads():
 class DisplayThread(threading.Thread):
     '''
     Thread class for plotting the result in the BG.
-    InitateMotorreally appreciated by python
+    InitiateMotorreally appreciated by python
     '''
     def __init__(self, threadID, name):
         threading.Thread.__init__(self)
@@ -371,8 +371,8 @@ polling_rate = 100 # How often to speak to the motor(ms)
 
 # Initate contact with motors
 #TODO move these to the threads
-motor_X = TM.InitateMotor(serial_num_X,pollingRate=polling_rate)
-motor_Y = TM.InitateMotor(serial_num_Y,pollingRate=polling_rate)
+motor_X = TM.InitiateMotor(serial_num_X,pollingRate=polling_rate)
+motor_Y = TM.InitiateMotor(serial_num_Y,pollingRate=polling_rate)
 
 # Create camera and set defaults
 cam = TC.get_camera()
