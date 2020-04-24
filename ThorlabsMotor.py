@@ -20,7 +20,7 @@ DeviceManagerCLI.BuildDeviceList()
 DeviceManagerCLI.GetDeviceListSize()
 
 # Relevant parameters
-# mmToPixel = 10000/0.6 # 1 mm = 10 000 pixels for 60x objective # Double check the value
+
 
 # TODO change this to a class?
 timeoutVal = 30000
@@ -86,7 +86,22 @@ def InitiatePiezoMotor(serialNumber,pollingRate=250):
     motor.EnableDevice()
 
     return motor
-
+class StageMotor():
+    '''
+    Class for the motors used by the stage. Class currently not in use
+    '''
+    def __init__(self,serialNumber,pollingRate=200,mmToPixel=16140):
+        self.motor = InitiateMotor(serialNumber,pollingRate)
+        self.startingPosition = self.motor.GetPosition()
+        self.,mmToPixel = mmToPixel
+    def SetJogSpeed(self,jogSpeed,jogAcc=0.1):
+        try:
+            self.motor.SetJogVelocityParams(Decimal(jogSpeed),Decimal(jogAcc))
+        except:
+            print('Could not set jog speed.')
+    def __del__(self):
+        self.motor.StopPolling()
+        self.motor.Disconnect()
 def InitiateMotor(serialNumber,pollingRate=250):
     DeviceManagerCLI.BuildDeviceList()
     DeviceManagerCLI.GetDeviceListSize()
