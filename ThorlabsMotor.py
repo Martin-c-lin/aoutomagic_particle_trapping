@@ -93,7 +93,7 @@ class StageMotor():
     def __init__(self,serialNumber,pollingRate=200,mmToPixel=16140):
         self.motor = InitiateMotor(serialNumber,pollingRate)
         self.startingPosition = self.motor.GetPosition()
-        self.,mmToPixel = mmToPixel
+        self.mmToPixel = mmToPixel
     def SetJogSpeed(self,jogSpeed,jogAcc=0.1):
         try:
             self.motor.SetJogVelocityParams(Decimal(jogSpeed),Decimal(jogAcc))

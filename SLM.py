@@ -15,20 +15,24 @@ def RS(N,M,Delta,image_width):
     RN = np.transpose(np.random.uniform(low=0.0, high=2*pi, size=(1,M)))*np.ones((1,N))
     return np.angle(np.sum(np.exp(1j*(Delta+RN)),axis=0))+pi
 # Weighted Gerchberg-Saxton Algorithm (GSW)
-def GSW(N,M,Delta,image_width=1080,nbr_iterations=30):
+def GSW(N,M,Delta=None,image_width=1080,nbr_iterations=30):
+    if Delta is None:
+        Delta = SLM.get_delta(image_width=image_width)
     Phi = RS(N,M,Delta,image_width) # Initial guess
     W = np.ones((M,1))
     I_m =np.uint8(np.ones((M,1)))
     I_N = np.uint8(np.ones((1,N)))
     Delta_J = np.exp(1j*Delta)
     for J in range(nbr_iterations):
-        V = np.abs(np.mean((np.exp(1j*(I_m*Phi-Delta))),axis=0))
-        V_abs = np.abs(V)
-        W = np.mean(V_abs)*(W/V_abs)
-        Phi = np.angle(np.sum(Delta_J*((W*V/V_abs)*I_N),axis=0))
-        #print("Iteration no:",J)
-    return np.reshape(Phi*255/(2*pi),(image_width,image_width))
-def get_delta(image_width = 1080,d = 20e-6,d0x=-120e-6,d0y=30e-6):
+        V = np.reshape(np.mean((np.exp(1j*(I_m*Phi)-Delta)),axis=1),(M,1)) # axis = 0
+        V_abs = abs(V)
+        W = np.mean(V_abs)*np.divide(W,V_abs)
+        Phi = np.angle(sum(np.multiply(Delta_J, np.divide(np.multiply(W,V),V_abs)*I_N))) # axis = 0
+        print(J,np.shape(Phi),np.shape(V),np.shape(W))
+
+    return np.reshape(128+Phi*255/(2*pi),(image_width,image_width))
+
+def get_delta(image_width = 1080,d = 60e-6,d0x=-120e-6,d0y=-115e-6):
     """
     Calculates delta in paper. I.e the phase shift of light when travelling from
     the SLM to the trap position for a specific set of points
@@ -46,56 +50,86 @@ def get_delta(image_width = 1080,d = 20e-6,d0x=-120e-6,d0y=30e-6):
     z = 0
     lambda_ = 532e-9
 
-    n1 = 3 # point-rows not used now
-    n2 = 1  # #point-columns
-    # d = 20e-6 # Distance between particles
-    # d0x=-120e-6 # From allessandros matlabs script
-    # d0y=30e-6
-    M = 3#n1*n2 # Total number of particles
+    M = 16#n1*n2 # Total number of traps
 
     xm = np.zeros((M))
     ym = np.zeros((M))
 
     zm = np.zeros((M))
 
-    # xm = np.zeros((n1,n2))
-    # ym = np.zeros((n1,n2))
-    #
-    # zm = np.zeros((n1,n2))
 
-    '''
-    for j in range(n1):
-        for k in range(n2):
-            xm[j,k] = (((-(n1-1)*d/2)+(j)*d)+d0x)
-            ym[j,k] = (((-(n2-1)*d/2)+(k)*d)+d0y)
-            zm[j,k] = z
+    #
+    # ym[0] = d0y-0.5*d*np.sqrt(3/4)
+    # ym[1] = d0y-0.5*d*np.sqrt(3/4)
+    # ym[2] = d0y-0.5*d*np.sqrt(3/4)
+    # ym[3] = d0y-0.5*d*np.sqrt(3/4)
+    #
+    # ym[4] = d0y
+    # ym[5] = d0y
+    # ym[6] = d0y
+    # ym[7] = d0y
+    #
+    # ym[8] = d0y+0.5*d*np.sqrt(3/4)
+    # ym[9] = d0y+0.5*d*np.sqrt(3/4)
+    # ym[10] = d0y+0.5*d*np.sqrt(3/4)
+    # ym[11] = d0y+0.5*d*np.sqrt(3/4)
+    #
+    # ym[12] = d0y + (0.5*d*np.sqrt(3/4)*2)
+    # ym[13] = d0y + (0.5*d*np.sqrt(3/4)*2)
+    # ym[14] = d0y + (0.5*d*np.sqrt(3/4)*2)
+    # ym[15] = d0y + (0.5*d*np.sqrt(3/4)*2)
 
-    '''
-    # d=15e-6;
-    # dd=1e-7;
+    # Hexagonal grid
+    # xm[0] = d0x-d/2
+    # xm[1] = d0x
+    # xm[2] = d0x+d/2
+    # xm[3] = d0x-d/2 +d/4
+    # xm[4] = d0x+d/4
+    # xm[5] = d0x+d/2+d/4
+    # xm[6] = d0x-d/2
+    # xm[7] = d0x
+    # xm[8] = d0x+d/2
     #
-    # Define the trap positions
-    # TODO change them all into 1d arrays
-    # xm[0][0] = d0x
-    # xm[1][0] = d0x
-    # xm[2][0] = d0x-0.7*d*np.sqrt(3)
-    # ym[0][0] = 0.7*d+d0y
-    # ym[1][0] = -0.7*d+d0y
-    # ym[2][0] = d0y
-    #
-    # zm[0][0] = 0# You start seein a difference at roughly 1e-10
-    # zm[1][0] = 0
-    # zm[2][0] = 0
-    xm[0] = d0x
+    # ym[0] = d0y-0.5*d*np.sqrt(3/4)
+    # ym[1] = d0y-0.5*d*np.sqrt(3/4)
+    # ym[2] = d0y-0.5*d*np.sqrt(3/4)
+    # ym[3] = d0y
+    # ym[4] = d0y
+    # ym[5] = d0y
+    # ym[6] = d0y+0.5*d*np.sqrt(3/4)
+    # ym[7] = d0y+0.5*d*np.sqrt(3/4)
+    # ym[8] = d0y+0.5*d*np.sqrt(3/4)
+
+    for i in range(4):
+        xm[i*4+0] = d0x-d/2
+        xm[i*4+1] = d0x
+        xm[i*4+2] = d0x+d/2
+        xm[i*4+3] = d0x+d
+        ym[i*4+0] = d0y+d/2*(i-1)
+        ym[i*4+1] = d0y+d/2*(i-1)
+        ym[i*4+2] = d0y+d/2*(i-1)
+        ym[i*4+3] = d0y+d/2*(i-1)
+        '''
+    xm[0] = d0x-d/2
     xm[1] = d0x
-    xm[2] = d0x+0.7*d*np.sqrt(3)
-    ym[0] = 0.7*d+d0y
-    ym[1] = -0.7*d+d0y
-    ym[2] = d0y
+    xm[2] = d0x+d/2
+    xm[3] = d0x-d/2
+    xm[4] = d0x
+    xm[5] = d0x+d/2
+    xm[6] = d0x-d/2
+    xm[7] = d0x
+    xm[8] = d0x+d/2
 
-    zm[0] = 0# You start seein a difference at roughly 1e-10
-    zm[1] = 0
-    zm[2] = 0
+    ym[0] = d0y-0.5*d
+    ym[1] = d0y-0.5*d
+    ym[2] = d0y-0.5*d
+    ym[3] = d0y
+    ym[4] = d0y
+    ym[5] = d0y
+    ym[6] = d0y+0.5*d
+    ym[7] = d0y+0.5*d
+    ym[8] = d0y+0.5*d
+        '''
 
     Delta=np.zeros((M,N))
     for m in range(M):
@@ -104,13 +138,8 @@ def get_delta(image_width = 1080,d = 20e-6,d0x=-120e-6,d0y=30e-6):
         # Calculate delta according to eq : in paper
         # Using python "%" instead of Matlabs "rem"
         Delta[m,:]=np.reshape(2*pi*p/lambda_/f*((np.transpose(I)*x*xm[m]+(y*I)*ym[m]) + 1/(2*f)*zm[m] * ( (np.transpose(I)*x)**2 + (y*I)**2 )) % (2*pi),(1,N))
-        #i2,i1 = divmod(m,n1)
-        # Delta[m,:]=np.reshape(2*pi*p/lambda_/f*(np.transpose(I)*x*xm[i1,i2]+(y*I)*ym[i1,i2])%(2*pi),(1,N))
-
         # TODO Add z-dependence to to ensuere that this works also in 3d
         # Can we remove the %2pi and * 2 *pi?
-        #Delta[m,:]=np.reshape(2*pi*p/lambda_/f*((np.transpose(I)*x*xm[i1,i2]+(y*I)*ym[i1,i2]) + 1/(2*f)*zm[i1,i2] * ( (np.transpose(I)*x)**2 + (y*I)**2 )) % (2*pi),(1,N))
-
     return Delta,N,M
 def setup_fullscreen_plt_image():
     '''
