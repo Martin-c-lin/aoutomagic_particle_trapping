@@ -16,8 +16,8 @@ from Thorlabs.MotionControl.KCube.DCServoCLI import *
 from Thorlabs.MotionControl.GenericMotorCLI import MotorDirection
 from Thorlabs.MotionControl.KCube.InertialMotorCLI import *
 
-DeviceManagerCLI.BuildDeviceList()
-DeviceManagerCLI.GetDeviceListSize()
+# DeviceManagerCLI.BuildDeviceList()
+# DeviceManagerCLI.GetDeviceListSize()
 
 # Relevant parameters
 
@@ -109,6 +109,10 @@ def InitiateMotor(serialNumber,pollingRate=250):
     motor = KCubeDCServo.CreateKCubeDCServo(serialNumber)
     for attempts in range(3):
         try:
+            # DeviceManagerCLI.BuildDeviceList()
+            # DeviceManagerCLI.GetDeviceListSize()
+            #
+            # motor = KCubeDCServo.CreateKCubeDCServo(serialNumber)
             motor.Connect(serialNumber)
         except:
             print("Connection attempt",attempts,"failed")

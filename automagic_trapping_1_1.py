@@ -44,6 +44,7 @@ def get_default_control_parameters(recording_path=None):
     'AOI':[0,1200,0,1000],
     'new_AOI_camera': False,
     'new_AOI_display': False,
+    'new_phasemask':False, # True if the phasemask is to be udpated
     'movement_threshold': 30,
     'record':False,
     'tracking_on':True,
@@ -66,14 +67,21 @@ def get_default_control_parameters(recording_path=None):
     }
 
     # Set traps positions
-    control_parameters['traps_absolute_pos'] = np.zeros((2,16))
-    control_parameters['traps_relative_pos'] = np.zeros((2,16))
+    control_parameters['traps_absolute_pos'] = np.zeros((2,1)) # This will need updating
+    control_parameters['traps_relative_pos'] = np.zeros((2,1))
+
+    # Position of first trap
+    control_parameters['traps_absolute_pos'][0][0] = 477
+    control_parameters['traps_absolute_pos'][1][0] = 467
+    control_parameters['traps_relative_pos'][0][0] = 477
+    control_parameters['traps_relative_pos'][1][0] = 467
+    '''
     for i in range(16):
         control_parameters['traps_absolute_pos'][0][i] = 459+154*(i%4)#x
         control_parameters['traps_absolute_pos'][1][i] = 311+154*(i//4)#y
         control_parameters['traps_relative_pos'][0][i] = 459+154*(i%4)#x
         control_parameters['traps_relative_pos'][1][i] = 311+154*(i//4)#y
-
+    '''
     control_parameters['traps_occupied'] = [False for i in range(len(control_parameters['traps_absolute_pos'][0]))]
     control_parameters['phasemask'] = np.zeros((1080,1080)) # phasemask of
     return control_parameters
@@ -85,7 +93,7 @@ def terminate_threads():
     control_parameters['motor_running'] = False
     messagebox.showinfo('Terminating threads')
     print('Terminating threads \n')
-    time.sleep(3)
+    time.sleep(1)
     global thread_list
     for thread in thread_list:
         thread.join()
@@ -171,15 +179,42 @@ class CreateSLMThread(threading.Thread):
         self.setDaemon(True)
     def run(self):
         global control_parameters
-        Delta,N,M = SLM.get_delta()
+        nbr_active_traps = 1
+        max_nbr_traps = 9
+        traps_positions = np.zeros((2,max_nbr_traps))
+
+        xm,ym = SLM.get_default_xm_ym()
+        screen_x = [477,630,780,478,632,781,479,633,785]
+        screen_y = [467,466,465,620,619,618,774,773,772]
+        Delta,N,M = SLM.get_delta(xm=xm[:nbr_active_traps],ym=xm[:nbr_active_traps] )
         control_parameters['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=4)
         while control_parameters['continue_capture']:
+            if control_parameters['new_phasemask']:
+                # Update number of traps in use
+                nbr_active_traps += 1
 
+                if nbr_active_traps<max_nbr_traps+1:
+                    # Calcualte new delta and phasemask
+                    Delta,N,M = SLM.get_delta(xm=xm[:nbr_active_traps],ym=ym[:nbr_active_traps] )
+                    control_parameters['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=30)
+
+                    # Update the number of traps and their position
+                    control_parameters['traps_absolute_pos'] = np.zeros((2,nbr_active_traps))
+                    control_parameters['traps_relative_pos'] = np.zeros((2,nbr_active_traps))
+
+                    control_parameters['traps_absolute_pos'][0] = screen_x[:nbr_active_traps]
+                    control_parameters['traps_absolute_pos'][1] = screen_y[:nbr_active_traps]
+                    control_parameters['traps_relative_pos'][0] = screen_x[:nbr_active_traps]
+                    control_parameters['traps_relative_pos'][1] = screen_y[:nbr_active_traps]
+
+                    control_parameters['traps_occupied'] = [False for i in range(len(control_parameters['traps_absolute_pos'][0]))]
+
+                else:
+                    # All traps already in position, no need to calculate phasemask
+                    nbr_active_traps = max_nbr_traps
+                # Acknowledge that a new phasemask was recived
+                control_parameters['new_phasemask'] = False
             time.sleep(1)
-        # SLM.setup_fullscreen_plt_image() # This has been replaced with a surperior tkinter window
-        # plt.imshow(SLM_image,cmap='gist_gray')
-        # while control_parameters['continue_capture']:
-        #     plt.pause(50000)
 class TemperatureThread(threading.Thread):
         '''
         Class for running the temperature controller in the background
@@ -358,12 +393,6 @@ class MotorThread(threading.Thread):
             elif np.abs(control_parameters['motor_movements'][self.axis]):
                 TM.MoveMotorPixels(self.motor,control_parameters['motor_movements'][self.axis])
                 control_parameters['motor_movements'][self.axis] = 0
-            '''
-            elif len(control_parameters['target_particle_center'])>0:
-               if np.abs(control_parameters['target_particle_center'][self.axis]-control_parameters['target_trap_pos'][self.axis])>=control_parameters['movement_threshold']:
-                    maxPixel = np.abs(control_parameters['AOI'][1]-control_parameters['AOI'][0])
-                    TM.MoveMotorToPixel(self.motor ,targetPixel=control_parameters['target_particle_center'][self.axis],currentPixel=control_parameters['target_trap_pos'][self.axis],maxPixel=maxPixel)
-            '''
             control_parameters['motor_locks'][self.axis].release()
             time.sleep(0.1) # To give other threads some time to work
 
@@ -499,7 +528,7 @@ class TrackingThread(threading.Thread):
                            # Get motor locks?
                            control_parameters['target_trap_pos'] = [control_parameters['traps_relative_pos'][0][min_index_trap],control_parameters['traps_relative_pos'][1][min_index_trap]]
                            control_parameters['target_particle_center'] = [control_parameters['particle_centers'][0][min_index_particle],control_parameters['particle_centers'][1][min_index_particle]]
-                           control_parameters['motor_movements'][0] = control_parameters['target_trap_pos'][0] - control_parameters['target_particle_center'][0]
+                           control_parameters['motor_movements'][0] = -(control_parameters['target_trap_pos'][0] - control_parameters['target_particle_center'][0]) # Note: Sign of this depends on setup
                            control_parameters['motor_movements'][1] = control_parameters['target_trap_pos'][1] - control_parameters['target_particle_center'][1]
 
                            # If there is a trapped particle then we do not want to move very far so we accidentally lose it
@@ -509,8 +538,13 @@ class TrackingThread(threading.Thread):
                            control_parameters['return_z_home'] = True
                        else:
                            print("All the traps have been occupied")
-                           control_parameters['z_movement'] = 10
-                           control_parameters['return_z_home'] = False
+
+                           control_parameters['new_phasemask'] = True
+
+                           # If all the traps are filled then we can lif the particles
+                           if len(control_parameters['traps_occupied'])>8:
+                               control_parameters['z_movement'] = 10
+                               control_parameters['return_z_home'] = False
                    else:
                        control_parameters['target_particle_center'] = []
                #print("Centers are",control_parameters['particle_centers'])
@@ -686,7 +720,7 @@ def move_button(move_direction):
     move_direction = 3 => move left
     '''
     global control_parameters
-
+    # TODO remove jog motor direction in favor of motor movement
     if move_direction==0:
         # Move up (Particles in image move up on the screen)
         control_parameters['jog_motor_in_direction'][3]=True
@@ -726,13 +760,14 @@ def set_particle_threshold():
 def toggle_tracking():
     control_parameters['tracking_on'] = not control_parameters['tracking_on']
     print("Tracking is ",control_parameters['tracking_on'])
+
 ############### Main script starts here ####################################
 control_parameters = get_default_control_parameters()
 # Create camera and set defaults
 cam = TC.get_camera()
 cam.set_defaults(left=control_parameters['AOI'][0],right=control_parameters['AOI'][1],top=control_parameters['AOI'][2],bot=control_parameters['AOI'][3],n_frames=1)
-#exposure_time = TC.find_exposure_time(cam) # automagically finds a decent exposure time
-#print('Exposure time = ',exposure_time)
+exposure_time = TC.find_exposure_time(cam) # automagically finds a decent exposure time
+print('Exposure time = ',exposure_time)
 
 # Capture an example image to work with
 image = cam.grab_image()
