@@ -9,7 +9,7 @@ def get_resource_list():
     rm = pyvisa.ResourceManager()
     return rm.list_resources()
 
-class TED4015():
+class TED4015_controller():
     """
     Class for controlling the TED4015 instrument.
     Initiates the instrument to upon creation. Use with care since error handling is
