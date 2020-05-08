@@ -54,8 +54,12 @@ def get_default_control_parameters(recording_path=None):
     # Used to minimize changes in code when updating to multiparticle tracking
     'target_trap_pos':[500,500],# Position of the trap we currently are trying to trap in
     'motor_movements':[0,0], # How much x and y motor should be moved
+    'motor_starting_pos':[0,0], # Startng position of x-y motors, needed for z-compensation
+    'motor_current_pos':[0,0], # Current position of x-y motors, needed for z-compensation
     'z_starting_position':0, # Where the experiments starts in z position
     'z_movement':0, # Target z-movement in "ticks" positive for up, negative for down
+    'z_x_diff':642, # Used for compensating drift in z when moving the sample. Caused by sample being slightly tilted
+    'z_y_diff':418,
     'return_z_home':False,
     'particle_threshold':120,
     'particle_size_threshold':200, # Parcticle detection threshold
@@ -143,7 +147,7 @@ def create_buttons(top):
     toggle_bright_particle_button = tkinter.Button(top, text ='Toggle particle brightness', command = toggle_bright_particle)
     threshold_entry = tkinter.Entry(top, bd =5)
     toggle_tracking_button = tkinter.Button(top, text ='Toggle particle tracking', command = toggle_tracking)
-    def set_threhold():
+    def set_threshold():
         entry = threshold_entry.get()
         try:
             threshold = int(entry)
@@ -155,7 +159,10 @@ def create_buttons(top):
         except:
             print('Cannot convert entry to integer')
         threshold_entry.delete(0,last=5000)
-    threshold_button = tkinter.Button(top, text ='Set threshold', command = set_threhold)
+    threshold_button = tkinter.Button(top, text ='Set threshold', command = set_threshold)
+    focus_up_button = tkinter.Button(top, text ='Move focus up', command = focus_up)
+    focus_down_button = tkinter.Button(top, text ='Move focus down', command = focus_down)
+
     # Idea - Use radiobutton for the toggle
     # TODO add button for zoom in
     x_position = 1220
@@ -171,6 +178,9 @@ def create_buttons(top):
     threshold_entry.place(x=x_position,y=400)
     threshold_button.place(x=x_position+100,y=400)
     toggle_tracking_button.place(x=x_position,y=440)
+    focus_up_button.place(x=x_position,y=480)
+    focus_down_button.place(x=x_position,y=520)
+
 class CreateSLMThread(threading.Thread):
     def __init__(self,threadID,name):
         threading.Thread.__init__(self)
@@ -179,14 +189,15 @@ class CreateSLMThread(threading.Thread):
         self.setDaemon(True)
     def run(self):
         global control_parameters
-        nbr_active_traps = 1
+        nbr_active_traps = 3#1
         max_nbr_traps = 9
         traps_positions = np.zeros((2,max_nbr_traps))
 
         xm,ym = SLM.get_default_xm_ym()
+        print('xm=',xm,'\n ym=',ym)
         screen_x = [477,630,780,478,632,781,479,633,785]
         screen_y = [467,466,465,620,619,618,774,773,772]
-        Delta,N,M = SLM.get_delta(xm=xm[:nbr_active_traps],ym=xm[:nbr_active_traps] )
+        Delta,N,M = SLM.get_delta(xm=xm[:nbr_active_traps],ym=ym[:nbr_active_traps] )
         control_parameters['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=4)
         while control_parameters['continue_capture']:
             if control_parameters['new_phasemask']:
@@ -252,9 +263,11 @@ class TkinterDisplay:
          self.window.geometry('1500x1000')
          # After it is called once, the update method will be automatically called every delay milliseconds
          self.delay = 50
-         self.button_SLM = tkinter.Button(window, text = "SLM window test",
-             command= lambda: self.create_SLM_window(SLM_window))
-         self.button_SLM.place(x=1300, y=200)
+
+         self.create_SLM_window(SLM_window)
+         # self.button_SLM = tkinter.Button(window, text = "SLM window test",
+         #     command= lambda: self.create_SLM_window(SLM_window))
+         # self.button_SLM.place(x=1300, y=200)
          self.update()
          start_threads()
 
@@ -274,7 +287,7 @@ class TkinterDisplay:
          # Get a frame from the video source
          global image
          # global control_parameters
-         # #TODO? Might wanna do some rescaling of the image so we can zoom in
+         # #TODO? Might wanna do some rescaling of the image so we can zoom in and still use the whole screen
          self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(image))
          self.canvas.create_image(0, 0, image = self.photo, anchor = tkinter.NW) # need to use a compatible image type
          self.window.after(self.delay, self.update)
@@ -302,11 +315,6 @@ class SLM_window(Frame):
         self.img.image = self.photo
         self.img.place(x=0, y=0)
         self.after(self.delay, self.update)
-        '''
-        self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(control_parameters['phasemask']))
-        self.canvas.create_image(0, 0, image = self.photo, anchor = tkinter.NW) # need to use a compatible image type
-        self.after(self.delay, self.update)
-        '''
 class DisplayThread(threading.Thread):
     '''
     Thread class for plotting the result in the BG.
@@ -370,7 +378,8 @@ class MotorThread(threading.Thread):
           self.motor = TM.InitiateMotor(control_parameters['serial_num_Y'],pollingRate=control_parameters['polling_rate'])
       else:
           print('Invalid choice of axis, no motor available')
-
+      control_parameters['motor_starting_pos'][self.axis] = float(str(self.motor.Position))
+      print('Motor is at ',control_parameters['motor_starting_pos'][self.axis])
       self.setDaemon(True)
     def run(self):
        print('Running motor thread')
@@ -393,13 +402,15 @@ class MotorThread(threading.Thread):
             elif np.abs(control_parameters['motor_movements'][self.axis]):
                 TM.MoveMotorPixels(self.motor,control_parameters['motor_movements'][self.axis])
                 control_parameters['motor_movements'][self.axis] = 0
+            control_parameters['motor_current_pos'][self.axis] = float(str(self.motor.Position))
             control_parameters['motor_locks'][self.axis].release()
             time.sleep(0.1) # To give other threads some time to work
 
        TM.DisconnectMotor(self.motor)
 class z_movement_thread(threading.Thread):
     '''
-    Thread for controling movement of the objective in z-direction
+    Thread for controling movement of the objective in z-directio.
+    Will also help with automagically adjusting the focus to the sample.
     '''
     def __init__(self, threadID, name,serial_no,channel,polling_rate=250):
         threading.Thread.__init__(self)
@@ -409,30 +420,41 @@ class z_movement_thread(threading.Thread):
         self.piezo = TM.PiezoMotor(serial_no,channel=channel,pollingRate=polling_rate)
         control_parameters['z_starting_position'] = self.piezo.get_position()
         self.setDaemon(True)
+    def compensate_focus(self):
+        '''
+        Function for compensating the change in focus caused by x-y movement.
+        '''
+        global control_parameters
+        new_z_pos = (control_parameters['z_starting_position']
+            +control_parameters['z_x_diff']*(control_parameters['motor_starting_pos'][0] - control_parameters['motor_current_pos'][0])
+            +control_parameters['z_y_diff']*(control_parameters['motor_starting_pos'][1] - control_parameters['motor_current_pos'][1]) )
+        return int(new_z_pos)
     def run(self):
         global control_parameters
 
         while control_parameters['continue_capture']:
 
             # Check if the objective should be moved
+            self.piezo.move_to_position(self.compensate_focus())
+
             if control_parameters['z_movement'] is not 0:
-                try:
+                #try:
                     control_parameters['z_movement'] = int(control_parameters['z_movement'])
                     # Move up if we are not already up
-                    if self.piezo.get_position()<control_parameters['z_starting_position']+300:
-                        self.piezo.move_relative(control_parameters['z_movement'])
+
+                    #if self.piezo.get_position()<control_parameters['z_starting_position']+300:
+                    self.piezo.move_relative(control_parameters['z_movement'])
+
                     control_parameters['z_movement'] = 0
-                except:
-                    print('Cannot move objective to',control_parameters['z_movement'] )
-                    print('Resetting target z movement.')
+                # except:
+                #     print('Cannot move objective to',control_parameters['z_movement'] )
+                #     print('Resetting target z movement.')
                     control_parameters['z_movement'] = 0
             elif control_parameters['return_z_home']:
                 self.piezo.move_to_position(control_parameters['z_starting_position'])
                 control_parameters['return_z_home'] = False
                 print('homing z')
-            time.sleep(0.2)
-
-        self.piezo.move_to_position(control_parameters['z_starting_position'])
+            time.sleep(0.1)
 class CameraThread(threading.Thread):
    def __init__(self, threadID, name,batch_size=100):
       threading.Thread.__init__(self)
@@ -754,21 +776,28 @@ def toggle_bright_particle():
     '''
     control_parameters['bright_particle'] = not control_parameters['bright_particle']
     print("control_parameters['bright_particle'] set to",control_parameters['bright_particle'])
-def set_particle_threshold():
-    threshold=control_parameters['particle_threshold'] = threshold
-    return
 def toggle_tracking():
     control_parameters['tracking_on'] = not control_parameters['tracking_on']
     print("Tracking is ",control_parameters['tracking_on'])
+def focus_up():
+    '''
+    Used for focus button to shift focus slightly up
+    '''
+    control_parameters['z_starting_position'] += 5
+def focus_down():
+    '''
+    Used for focus button to shift focus slightly up
+    '''
+    control_parameters['z_starting_position'] -= 5
 
 ############### Main script starts here ####################################
 control_parameters = get_default_control_parameters()
 # Create camera and set defaults
 cam = TC.get_camera()
 cam.set_defaults(left=control_parameters['AOI'][0],right=control_parameters['AOI'][1],top=control_parameters['AOI'][2],bot=control_parameters['AOI'][3],n_frames=1)
-exposure_time = TC.find_exposure_time(cam) # automagically finds a decent exposure time
-print('Exposure time = ',exposure_time)
-
+#exposure_time = TC.find_exposure_time(cam) # automagically finds a decent exposure time
+#print('Exposure time = ',exposure_time)
+TC.set_exposure(cam,85)
 # Capture an example image to work with
 image = cam.grab_image()
 

@@ -109,10 +109,7 @@ def InitiateMotor(serialNumber,pollingRate=250):
     motor = KCubeDCServo.CreateKCubeDCServo(serialNumber)
     for attempts in range(3):
         try:
-            # DeviceManagerCLI.BuildDeviceList()
-            # DeviceManagerCLI.GetDeviceListSize()
-            #
-            # motor = KCubeDCServo.CreateKCubeDCServo(serialNumber)
+
             motor.Connect(serialNumber)
         except:
             print("Connection attempt",attempts,"failed")

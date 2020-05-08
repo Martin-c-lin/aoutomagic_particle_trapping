@@ -17,6 +17,11 @@ def number_to_millisecond(nbr):
 def distance_2D(P1,P2):
     from numpy import sqrt
     return sqrt((P1[0]-P2[0])**2+(P1[1]-P2[1])**2)
+def set_exposure(cam,exposure_time):
+    '''
+    Function for settin exposure time on camera
+    '''
+    return cam.set_defaults(exposure_time=number_to_millisecond(exposure_time))
 def find_closest(centers,target):
     from numpy import inf
     index=0
