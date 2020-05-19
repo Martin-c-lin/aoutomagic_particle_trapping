@@ -678,7 +678,9 @@ class ExperimentControlThread(threading.Thread):
    def run(self):
        global image
        global control_parameters
-       while control_parameters['continue_capture']: # Change to continue tracking?
+       run_no = 0
+       while control_parameters['continue_capture']:
+            separation,temperature = experiment_schedule[run_no]
             if control_parameters['tracking_on']:
                 time.sleep(0.3)
             time.sleep(0.3) # Needed to prevent this thread from running too fast
@@ -900,7 +902,7 @@ def focus_down():
 def zoom_in(margin=50):
     # Helper function for zoom button.
     # automagically zoom in on our traps
-
+    # TODO make this so that it does not change shape when running an experiment
     left = max(min(control_parameters['traps_absolute_pos'][0])-margin,0)
     left = int(left // 10 * 10)
     right = min(max(control_parameters['traps_absolute_pos'][0])+margin,1200)
@@ -941,8 +943,40 @@ def search_for_particles():
         control_parameters['search_direction']= 'left'
     if control_parameters['search_direction']== 'left' and control_parameters['motor_current_pos'][0]<=control_parameters['motor_starting_pos'][0]:
         control_parameters['search_direction']= 'right'
-
-
+def move_out_particles(last_d = 30e-6):
+    # Function for moving the particles out from the center to the edges
+    global control_parameters
+    if last_d>40e-6 or last_d<10e-6:
+        print('Too large distance.')
+        return
+    while control_parameters['trap_separation']<last_d:
+        if control_parameters['new_phasemask']==False:
+            control_parameters['trap_separation'] += 1e-6
+            control_parameters['new_phasemask'] = True
+        time.sleep(1)
+    return
+experiment_schedule = [
+    [30e-6,25.0],
+    [29e-6,25.0],
+    [28e-6,25.0],
+    [27e-6,25.0],
+    [26e-6,25.0],
+    [25e-6,25.0],
+    [24e-6,25.0],
+    [23e-6,25.0],
+    [22e-6,25.0],
+    [21e-6,25.0],
+    [20e-6,25.0],
+    [19e-6,25.0],
+    [18e-6,25.0],
+    [17e-6,25.0],
+    [16e-6,25.0],
+    [15e-6,25.0],
+    [14e-6,25.0],
+    [13e-6,25.0],
+    [12e-6,25.0],
+    [11e-6,25.0],
+] # Arranged a distance,temp
 ############### Main script starts here ####################################
 control_parameters = get_default_control_parameters()
 # Create camera and set defaults
