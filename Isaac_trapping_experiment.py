@@ -49,7 +49,7 @@ def get_default_control_parameters(recording_path=None):
     'movement_threshold': 30,
     'framerate':10,
     'recording':False,
-    'tracking_on':True,
+    'tracking_on':False,
     'setpoint_temperature':25,
     'current_temperature':25,
     'starting_temperature':25,
@@ -71,7 +71,11 @@ def get_default_control_parameters(recording_path=None):
     'particle_size_threshold':200, # Parcticle detection threshold
     'bright_particle':True, # Is particle brighter than the background?
     'xy_movement_limit':1200,
-    'motor_locks': [threading.Lock(),threading.Lock()]
+    'motor_locks': [threading.Lock(),threading.Lock()],
+
+    # Parameters specific to this experiment
+    'SLM_iterations':10,
+    'trap_separation':20e-6,
     }
 
     # Set traps positions
@@ -111,31 +115,33 @@ def start_threads():
     """
     Function for starting all the threads, can only be called once
     """
+    #global motor_X
+    #global motor_Y
     global thread_list
     # global temperature_controller
     camera_thread = CameraThread(1, 'Thread-camera')
-    motor_X_thread = MotorThread(2,'Thread-motorX',0) # Last argument is to indicate that it is the x-motor and not the y
-    motor_Y_thread = MotorThread(3,'Thread-motorY',1)
+    #motor_X_thread = MotorThread(2,'Thread-motorX',0) # Last argument is to indicate that it is the x-motor and not the y
+    #motor_Y_thread = MotorThread(3,'Thread-motorY',1)
     slm_thread =CreateSLMThread(4,'Thread-SLM')
-    tracking_thread = TrackingThread(5,'Tracker_thread')
+    tracking_thread = ExperimentControlThread(5,'Tracker_thread')
     temperature_thread = TemperatureThread(6,'Temperature_thread')
-    z_thread = z_movement_thread(6, 'z-thread',serial_no=control_parameters['serial_no_piezo'],channel=control_parameters['channel'])
+    #z_thread = z_movement_thread(6, 'z-thread',serial_no=control_parameters['serial_no_piezo'],channel=control_parameters['channel'])
 
     camera_thread.start()
-    motor_X_thread.start()
-    motor_Y_thread.start()
+    #motor_X_thread.start()
+    #motor_Y_thread.start()
     tracking_thread.start()
     slm_thread.start()
-    z_thread.start()
+    #z_thread.start()
     temperature_thread.start()
     print('Camera, SLM, tracking, motor_X and motor_Y threads created')
     thread_list.append(temperature_thread)
     thread_list.append(camera_thread)
-    thread_list.append(motor_X_thread)
-    thread_list.append(motor_Y_thread)
+    #thread_list.append(motor_X_thread)
+    #thread_list.append(motor_Y_thread)
     thread_list.append(tracking_thread)
     thread_list.append(slm_thread)
-    thread_list.append(z_thread)
+    #thread_list.append(z_thread)
 def create_buttons(top):
     def get_y_separation(start=50,distance=40):
         index = 0
@@ -144,16 +150,15 @@ def create_buttons(top):
             index += 1
     global control_parameters
     exit_button = tkinter.Button(top, text ='Exit program', command = terminate_threads)
-    up_button = tkinter.Button(top, text ='Move up', command = partial(move_button,0))
-    down_button = tkinter.Button(top, text ='Move down', command = partial(move_button,1))
-    right_button = tkinter.Button(top, text ='Move right', command = partial(move_button,2))
-    left_button = tkinter.Button(top, text ='Move left', command = partial(move_button,3))
     start_record_button = tkinter.Button(top, text ='Start recording', command = start_record)
     stop_record_button = tkinter.Button(top, text ='Stop recording', command = stop_record)
     toggle_bright_particle_button = tkinter.Button(top, text ='Toggle particle brightness', command = toggle_bright_particle)
     threshold_entry = tkinter.Entry(top, bd =5)
     temperature_entry = tkinter.Entry(top, bd =5)
-    toggle_tracking_button = tkinter.Button(top, text ='Toggle particle tracking', command = toggle_tracking)
+    iterations_entry = tkinter.Entry(top,bd=5)
+    separation_entry = tkinter.Entry(top,bd=5)
+    toggle_tracking_button = tkinter.Button(top, text ='Toggle auto experiment', command = toggle_tracking)
+
     def set_threshold():
         entry = threshold_entry.get()
         try:
@@ -176,13 +181,39 @@ def create_buttons(top):
             else:
                 print('Temperature out of bounds, it is no good to cook or freeze your samples')
         except:
-            print('Cannot convert entry to integer')
+            print('Cannot convert entry to float')
         temperature_entry.delete(0,last=5000)
+    def set_iterations():
+        entry = iterations_entry.get()
+        try:
+            iterations = int(entry)
+            if 1<iterations<40:
+                control_parameters['SLM_iterations'] = iterations
+                print("Number SLM iterations set to ",iterations)
+                control_parameters['new_phasemask'] = True
+            else:
+                print('SLM iterations out of bounds')
+        except:
+            print('Cannot convert entry to integer')
+        iterations_entry.delete(0,last=5000)
+    def set_particle_separtion():
+        entry = separation_entry.get()
+        try:
+            separation = float(entry)*1e-6
+            if 1*1e-6<separation<40*1e-6:
+                control_parameters['trap_separation'] = separation
+                print("Trap separation set to ",separation)
+                control_parameters['new_phasemask'] = True
+            else:
+                print('SLM iterations out of bounds')
+        except:
+            print('Cannot convert entry to integer')
+        separation_entry.delete(0,last=5000)
 
     threshold_button = tkinter.Button(top, text ='Set threshold', command = set_threshold)
-    focus_up_button = tkinter.Button(top, text ='Move focus up', command = focus_up)
-    focus_down_button = tkinter.Button(top, text ='Move focus down', command = focus_down)
     temperature_button = tkinter.Button(top, text ='Set setpoint temperature', command = set_temperature)
+    SLM_Iterations_button = tkinter.Button(top, text ='Set SLM iterations', command = set_iterations)
+    set_separation_button = tkinter.Button(top, text ='Set particle separation', command = set_particle_separtion)
     zoom_in_button = tkinter.Button(top, text ='Zoom in', command = zoom_in)
     zoom_out_button = tkinter.Button(top, text ='Zoom out', command = zoom_out)
 
@@ -192,23 +223,22 @@ def create_buttons(top):
     x_position = 1220
     y_position = get_y_separation()
     exit_button.place(x=x_position, y=y_position.__next__())
-    up_button.place(x=x_position, y=y_position.__next__())
-    down_button.place(x=x_position, y=y_position.__next__())
-    right_button.place(x=x_position, y=y_position.__next__())
-    left_button.place(x=x_position, y=y_position.__next__())
     start_record_button.place(x=x_position, y=y_position.__next__())
     stop_record_button.place(x=x_position,y=y_position.__next__())
     toggle_bright_particle_button.place(x=x_position, y=y_position.__next__())
     threshold_entry.place(x=x_position,y=y_position.__next__())
     threshold_button.place(x=x_position,y=y_position.__next__())
     toggle_tracking_button.place(x=x_position,y=y_position.__next__())
-    focus_up_button.place(x=x_position,y=y_position.__next__())
-    focus_down_button.place(x=x_position,y=y_position.__next__())
     temperature_entry.place(x=x_position,y=y_position.__next__())
     temperature_button.place(x=x_position,y=y_position.__next__())
     zoom_in_button.place(x=x_position,y=y_position.__next__())
     zoom_out_button.place(x=x_position,y=y_position.__next__())
+    # New ones for this experiment
+    iterations_entry.place(x=x_position,y=y_position.__next__())
+    SLM_Iterations_button.place(x=x_position,y=y_position.__next__())
 
+    separation_entry.place(x=x_position,y=y_position.__next__())
+    set_separation_button.place(x=x_position,y=y_position.__next__())
 class CreateSLMThread(threading.Thread):
     def __init__(self,threadID,name):
         threading.Thread.__init__(self)
@@ -217,16 +247,16 @@ class CreateSLMThread(threading.Thread):
         self.setDaemon(True)
     def run(self):
         global control_parameters
-        nbr_active_traps = 3#1
-        max_nbr_traps = 9
+        nbr_active_traps = 2#1
+        max_nbr_traps = 2
         traps_positions = np.zeros((2,max_nbr_traps))
+        phasemask_to_pixel = 10 # Ratio between length in pixels and length in phasemask generator
 
-        xm,ym = SLM.get_default_xm_ym()
-        print('xm=',xm,'\n ym=',ym)
-        screen_x = [578,727,877,578,727,877,578,727,877]
-        screen_y = [465,465,465,615,615,615,765,765,765]
-        Delta,N,M = SLM.get_delta(xm=xm[:nbr_active_traps],ym=ym[:nbr_active_traps] )
-        control_parameters['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=10)
+        xm,ym = SLM.get_Isaac_xm_ym()
+        screen_x = [578,727]
+        screen_y = [465,465]
+        Delta,N,M = SLM.get_delta(xm=xm,ym=ym)
+        control_parameters['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=control_parameters['SLM_iterations'])
 
         control_parameters['traps_absolute_pos'] = np.zeros((2,nbr_active_traps))
         control_parameters['traps_relative_pos'] = np.zeros((2,nbr_active_traps))
@@ -241,27 +271,22 @@ class CreateSLMThread(threading.Thread):
         while control_parameters['continue_capture']:
             if control_parameters['new_phasemask']:
                 # Update number of traps in use
-                nbr_active_traps += 1
+                # Calcualte new delta and phasemask
+                xm,ym = SLM.get_Isaac_xm_ym(d = control_parameters['trap_separation'])
+                Delta,N,M = SLM.get_delta()
+                control_parameters['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=control_parameters['SLM_iterations'])
 
-                if nbr_active_traps<max_nbr_traps+1:
-                    # Calcualte new delta and phasemask
-                    Delta,N,M = SLM.get_delta(xm=xm[:nbr_active_traps],ym=ym[:nbr_active_traps] )
-                    control_parameters['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=30)
+                # Update the number of traps and their position
+                control_parameters['traps_absolute_pos'] = np.zeros((2,nbr_active_traps))
+                control_parameters['traps_relative_pos'] = np.zeros((2,nbr_active_traps))
 
-                    # Update the number of traps and their position
-                    control_parameters['traps_absolute_pos'] = np.zeros((2,nbr_active_traps))
-                    control_parameters['traps_relative_pos'] = np.zeros((2,nbr_active_traps))
+                control_parameters['traps_absolute_pos'][0] = screen_x[:nbr_active_traps]
+                control_parameters['traps_absolute_pos'][1] = screen_y[:nbr_active_traps]
+                control_parameters['traps_relative_pos'][0] = [x - control_parameters['AOI'][0] for x in screen_x[:nbr_active_traps]]
+                control_parameters['traps_relative_pos'][1] = [y - control_parameters['AOI'][2] for y in screen_y[:nbr_active_traps]]
 
-                    control_parameters['traps_absolute_pos'][0] = screen_x[:nbr_active_traps]
-                    control_parameters['traps_absolute_pos'][1] = screen_y[:nbr_active_traps]
-                    control_parameters['traps_relative_pos'][0] = [x - control_parameters['AOI'][0] for x in screen_x[:nbr_active_traps]]
-                    control_parameters['traps_relative_pos'][1] = [y - control_parameters['AOI'][2] for y in screen_y[:nbr_active_traps]]
+                control_parameters['traps_occupied'] = [False for i in range(len(control_parameters['traps_absolute_pos'][0]))]
 
-                    control_parameters['traps_occupied'] = [False for i in range(len(control_parameters['traps_absolute_pos'][0]))]
-
-                else:
-                    # All traps already in position, no need to calculate phasemask
-                    nbr_active_traps = max_nbr_traps
                 # Acknowledge that a new phasemask was recived
                 control_parameters['new_phasemask'] = False
             time.sleep(1)
@@ -357,9 +382,9 @@ class TkinterDisplay:
             self.recording_label.place(x=1220,y=900)
 
             if control_parameters['tracking_on']:
-             self.tracking_label = Label(self.window,text='particle tracking is on',bg='green')
+             self.tracking_label = Label(self.window,text='Auto experimentis on',bg='green')
             else:
-             self.tracking_label = Label(self.window,text='particle tracking is off',bg='red')
+             self.tracking_label = Label(self.window,text='Auto experimentis is off',bg='red')
             self.tracking_label.place(x=1220,y=930)
 
             position_text = 'x: '+str(control_parameters['motor_current_pos'][0])+' y: '+str(control_parameters['motor_current_pos'][1])+'z: '+str(control_parameters['motor_current_pos'][2])
@@ -383,9 +408,9 @@ class TkinterDisplay:
             self.recording_label.config(text='recording is off',bg='red')
 
         if control_parameters['tracking_on']:
-            self.tracking_label.config(text='particle tracking is on',bg='green')
+            self.tracking_label.config(text='Auto experiment is on',bg='green')
         else:
-            self.tracking_label.config(text='particle tracking is off',bg='red')
+            self.tracking_label.config(text='Auto experiment is off',bg='red')
         temperature_text = 'Current objective temperature is: '+str(control_parameters['current_temperature'])+' C'+'\n setpoint temperature is: '+str(control_parameters['setpoint_temperature'])+' C'
         self.temperature_label.config(text=temperature_text)
         position_text = 'x: '+str(control_parameters['motor_current_pos'][0])+\
@@ -641,7 +666,7 @@ class CameraThread(threading.Thread):
            end = time.time()
            cam.stop_live_video()
            print('Capture sequence finished',image_count, 'Images captured in ',end-start,'seconds. \n FPS is ',image_count/(end-start))
-class TrackingThread(threading.Thread):
+class ExperimentControlThread(threading.Thread):
    '''
    Thread which does the tracking
    '''
@@ -654,55 +679,8 @@ class TrackingThread(threading.Thread):
        global image
        global control_parameters
        while control_parameters['continue_capture']: # Change to continue tracking?
-
             if control_parameters['tracking_on']:
-
-#               if not control_parameters['zoomed_in']:
-                   '''
-                   We are in full frame mode looking for a particle
-                   '''
-                   time.sleep(0.2) 
-                   x,y = fpt.find_particle_centers(copy.copy(image),
-                                                    threshold=control_parameters['particle_threshold'],
-                                                    particle_size_threshold=control_parameters['particle_size_threshold'],
-                                                    bright_particle=control_parameters['bright_particle'])
-                   control_parameters['particle_centers'] = [x,y]
-
-                   # Find the closest particles
-                   if len(x)>0: # Check that there are particles present
-
-                       min_index_trap,min_index_particle = find_closest_unoccupied()
-                       if min_index_particle is not None:
-                           control_parameters['target_trap_pos'] = [control_parameters['traps_relative_pos'][0][min_index_trap],control_parameters['traps_relative_pos'][1][min_index_trap]]
-                           control_parameters['target_particle_center'] = [control_parameters['particle_centers'][0][min_index_particle],control_parameters['particle_centers'][1][min_index_particle]]
-                           control_parameters['motor_movements'][0] = -(control_parameters['target_trap_pos'][0] - control_parameters['target_particle_center'][0]) # Note: Sign of this depends on setup
-                           control_parameters['motor_movements'][1] = control_parameters['target_trap_pos'][1] - control_parameters['target_particle_center'][1]
-
-                           # If there is a trapped particle then we do not want to move very far so we accidentally lose it
-                           if True in control_parameters['traps_occupied']:
-                               control_parameters['xy_movement_limit'] = 40
-                           else:
-                               control_parameters['xy_movement_limit'] = 1200
-                       if control_parameters['traps_occupied'].count(True)>8:
-                           control_parameters['z_movement'] = 40
-                           control_parameters['return_z_home'] = False
-                           print("LIFTING TIME!")
-                           if  control_parameters['AOI'][1]-control_parameters['AOI'][0]>900:
-                               zoom_in(margin=120)
-                       else:
-                           if control_parameters['AOI'][1]-control_parameters['AOI'][0]<900:
-                               zoom_out()
-                   else:
-                       control_parameters['target_particle_center'] = []
-
-                   # If there are no untrapped particles in the frame, go search for some.
-                   if False in control_parameters['traps_occupied']:
-                       control_parameters['return_z_home'] = True
-                   if len(x) == control_parameters['traps_occupied'].count(True) and False in control_parameters['traps_occupied']:
-                       search_for_particles()
-                       # No untrapped particles
-                   if False not in control_parameters['traps_occupied']:
-                           control_parameters['new_phasemask'] = True
+                time.sleep(0.3)
             time.sleep(0.3) # Needed to prevent this thread from running too fast
 def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
     '''

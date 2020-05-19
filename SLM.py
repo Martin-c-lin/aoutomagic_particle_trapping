@@ -55,6 +55,19 @@ def get_default_xm_ym():
         #ym[i*fac+3] = d0y+d/2*(i-1)
 
     return xm,ym
+def get_Isaac_xm_ym(d=30e-6):
+    d0x = -115e-6
+    d0y = -115e-6
+    xm = np.zeros((2))
+    ym = np.zeros((2))
+
+    xm[0] = d0x
+    xm[1] = d0x
+
+    ym[0] = d0y
+    ym[1] = d0y+d
+
+    return xm,ym
 def get_delta(image_width = 1080,xm=[],ym=[]):
     """
     Calculates delta in paper. I.e the phase shift of light when travelling from
