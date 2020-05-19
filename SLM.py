@@ -77,7 +77,6 @@ def get_delta(image_width = 1080,xm=[],ym=[]):
         xm,ym = get_default_xm_ym()
     M = len(xm) # Total number of traps
     zm = np.zeros((M))
-
     Delta=np.zeros((M,N))
     for m in range(M):
 
