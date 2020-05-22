@@ -31,6 +31,19 @@ def GSW(N,M,Delta=None,image_width=1080,nbr_iterations=30):
         print('Iteration: ',J)
 
     return np.reshape(128+Phi*255/(2*pi),(image_width,image_width))
+def  GS(N,M,Delta=None,image_width=1080,nbr_iterations=30):
+    if Delta is None:
+        Delta = SLM.get_delta(image_width=image_width)
+    Phi = RS(N,M,Delta) # Initial guess
+    W = np.ones((M,1))
+    I_m =np.uint8(np.ones((M,1)))
+    I_N = np.uint8(np.ones((1,N)))
+    Delta_J = np.exp(1j*Delta)
+    for J in range(nbr_iterations):
+        V = np.reshape(np.mean((np.exp(1j*(I_m*Phi)-Delta)),axis=1),(M,1))
+        print(V)
+        Phi = np.angle(sum(np.multiply(np.exp(Delta_J),np.divide(V,abs(V)))*I_N ))
+    return np.reshape(128+Phi*255/(2*pi),(image_width,image_width))
 def get_default_xm_ym():
     '''
     Generates default x,y positions for particle
@@ -63,9 +76,13 @@ def get_Isaac_xm_ym(d=30e-6):
 
     xm[0] = d0x
     xm[1] = d0x
+    #xm[2] = d0x
+    #xm[3] = d0x
 
     ym[0] = d0y
     ym[1] = d0y+d
+    #ym[2] = d0y
+    #ym[3] = d0y+d
 
     return xm,ym
 def get_delta(image_width = 1080,xm=[],ym=[]):
