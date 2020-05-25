@@ -423,7 +423,8 @@ class SLM_window(Frame):
         render = PIL.ImageTk.PhotoImage(load)
         self.img = Label(self, image=render)
         self.img.place(x=0, y=0)
-
+        # TODO FIX THE MEMORY ISSUE AS IN THE ISAAC_EXPERIMENT VERSIO!!!! REALLY IMPORTANTS
+    
         ####
         self.delay = 500
         self.update()
@@ -661,7 +662,7 @@ class TrackingThread(threading.Thread):
                    '''
                    We are in full frame mode looking for a particle
                    '''
-                   time.sleep(0.2) 
+                   time.sleep(0.2)
                    x,y = fpt.find_particle_centers(copy.copy(image),
                                                     threshold=control_parameters['particle_threshold'],
                                                     particle_size_threshold=control_parameters['particle_size_threshold'],

@@ -40,10 +40,15 @@ def  GS(N,M,Delta=None,image_width=1080,nbr_iterations=30):
     I_N = np.uint8(np.ones((1,N)))
     Delta_J = np.exp(1j*Delta)
     for J in range(nbr_iterations):
-        V = np.reshape(np.mean((np.exp(1j*(I_m*Phi)-Delta)),axis=1),(M,1))
-        print(V)
-        Phi = np.angle(sum(np.multiply(np.exp(Delta_J),np.divide(V,abs(V)))*I_N ))
-    return np.reshape(128+Phi*255/(2*pi),(image_width,image_width))
+        V = np.reshape( np.transpose( np.mean((np.exp(1j*(I_m*Phi)-Delta)),axis=1) ),(M,1))
+        Phi = np.angle(sum(np.multiply(Delta_J,np.divide(V,abs(V)))*I_N ))
+        print(J)
+    result = np.reshape(128+Phi*255/(2*pi),(image_width,image_width))
+    #print(np.min(result),np.max(result))
+    #result = result- np.min(result)
+    #result = result*(255/np.max(result))
+    print(np.min(result),np.max(result))
+    return  result#np.reshape(128+Phi*255/(2*pi),(image_width,image_width))#np.reshape(128+Phi*255/(2*pi),(image_width,image_width))
 def get_default_xm_ym():
     '''
     Generates default x,y positions for particle

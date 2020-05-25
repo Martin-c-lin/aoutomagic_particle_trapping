@@ -45,7 +45,8 @@ def get_default_control_parameters(recording_path=None):
     'AOI':[0,1200,0,1000],
     'new_AOI_camera': False,
     'new_AOI_display': False,
-    'new_phasemask':False, # True if the phasemask is to be udpated
+    'new_phasemask':False, # True if the phasemask is to be recalculated
+    'phasemask_updated':False, # True if the phasemask image needs to be updated
     'movement_threshold': 30,
     'framerate':10,
     'recording':False,
@@ -75,11 +76,16 @@ def get_default_control_parameters(recording_path=None):
     'motor_locks': [threading.Lock(),threading.Lock()],
 
     # Parameters specific to this experiment
+
+
+
     'exposure_time':2,
-    'SLM_iterations':10,
+    'SLM_iterations':30,
     'trap_separation':20e-6,
     'new_video':False,
     'recording_duration':200,
+    'experiment_schedule':[20e-6,25],
+    'experiment_progress':0, # number of experiments run
     }
 
     # Set traps positions
@@ -256,6 +262,7 @@ class CreateSLMThread(threading.Thread):
         screen_y = [465,465]
         Delta,N,M = SLM.get_delta(xm=xm,ym=ym)
         control_parameters['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=control_parameters['SLM_iterations'])
+        control_parameters['phasemask_updated'] = True
 
         control_parameters['traps_absolute_pos'] = np.zeros((2,nbr_active_traps))
         control_parameters['traps_relative_pos'] = np.zeros((2,nbr_active_traps))
@@ -274,7 +281,7 @@ class CreateSLMThread(threading.Thread):
                 xm,ym = SLM.get_Isaac_xm_ym(d = control_parameters['trap_separation'])
                 Delta,N,M = SLM.get_delta(xm=xm,ym=ym)
                 control_parameters['phasemask'] = SLM.GS(N,M,Delta,nbr_iterations=control_parameters['SLM_iterations']) # Note changed to GS
-
+                control_parameters['phasemask_updated'] = True
                 # Update the number of traps and their position
                 control_parameters['traps_absolute_pos'] = np.zeros((2,nbr_active_traps))
                 control_parameters['traps_relative_pos'] = np.zeros((2,nbr_active_traps))
@@ -366,7 +373,7 @@ class TkinterDisplay:
                 self.new.focus()
         except:
             self.new = tkinter.Toplevel(self.window)
-            _class(self.new)
+            self.SLM_Window = _class(self.new)
     def snapshot(self):
          global image
          global control_parameters
@@ -424,7 +431,8 @@ class TkinterDisplay:
         else:
             temperature_text += '\n Temperature is not stable'
         self.temperature_label.config(text=temperature_text)
-        position_text = 'Current trap separation is: ' + str(control_parameters['trap_separation'])
+        position_text = 'Current trap separation is: ' + str(control_parameters['trap_separation'])+ \
+        '\n Experiments run: '+str(control_parameters['experiment_progress'])+' out of: ' + str(len(control_parameters['experiment_schedule']))
         self.position_label.config(text=position_text)
     def resize_display_image(self,img):
         img_size = np.shape(img)
@@ -441,6 +449,9 @@ class TkinterDisplay:
          # Get a frame from the video source
          global image
          self.update_indicators()
+         if control_parameters['phasemask_updated']:
+             self.SLM_Window.update()
+             control_parameters['phasemask_updated'] = False
          self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(self.resize_display_image(image)))
          self.canvas.create_image(0, 0, image = self.photo, anchor = tkinter.NW) # need to use a compatible image type
          self.window.after(self.delay, self.update)
@@ -457,17 +468,18 @@ class SLM_window(Frame):
         render = PIL.ImageTk.PhotoImage(load)
         self.img = Label(self, image=render)
         self.img.place(x=0, y=0)
-
+        self.img.image = image
         ####
         self.delay = 500
         self.update()
     def update(self):
         # This implementation does work but is perhaps a tiny bit janky
         self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(control_parameters['phasemask']))
-        self.img = Label(self, image=self.photo)
-        self.img.image = self.photo
+        del self.img.image
+        self.img = Label(self,image=self.photo)
+        self.img.image = self.photo # This eats lots of memory
         self.img.place(x=0, y=0) # Do not think this is needed
-        self.after(self.delay, self.update)
+        #self.after(self.delay, self.update)
 class MotorThread(threading.Thread):
     '''
     Thread in which a motor is controlled. The motor object is available globally.
@@ -580,7 +592,7 @@ class CameraThread(threading.Thread):
         image_width = control_parameters['AOI'][1]-control_parameters['AOI'][0]
         image_height = control_parameters['AOI'][3]-control_parameters['AOI'][2]
         video_name = control_parameters['recording_path']+'/moive-'+str(now.hour)+\
-            '-'+str(now.minute)+'-'+str(now.second)+'T'+str(control_parameters['setpoint_temperature'])+\
+            '-'+str(now.minute)+'-'+str(now.second)+'T'+str(round(control_parameters['setpoint_temperature'],2))+\
             'C_'+str(control_parameters['trap_separation'])+'um.avi'
         video = VideoWriter(video_name, fourcc, float(control_parameters['framerate']), (image_width, image_height),isColor=False)
         return video,video_name
@@ -668,7 +680,11 @@ class ExperimentControlThread(threading.Thread):
                         # TODO record temperature
                         stop_record()
                         zoom_out()
+                        start_record()
+                        time.sleep(5) # Want to see the fluctuations
+                        stop_record()
                         run_finished = True
+                        control_parameters['experiment_progress'] += 1
                     else:
                         time.sleep(3)
                 run_no += 1
@@ -905,7 +921,7 @@ def zoom_in(margin=50):
     down = int(down // 10 * 10)
 
     control_parameters['framerate'] = 150 # Todo fix this so that it is better
-    set_AOI(left=700,right=800,up=570,down=770)
+    set_AOI(left=710,right=820,up=580,down=800)
 def zoom_out():
     set_AOI(left=0,right=1200,up=0,down=1000)
     control_parameters['framerate'] = 10
@@ -959,49 +975,111 @@ def move_particles_slowly(last_d = 30e-6):
             time.sleep(1)
     return
 
-T1 = 27
-T2 = 27.25
-experiment_schedule = [
-    [28e-6,25.0],
-    [25e-6,25.0],
-    [24e-6,25.0],
-    [23e-6,25.0],
-    [22e-6,25.0],
-    [21e-6,25.0],
-    [20e-6,25.0],
-    [19e-6,25.0],
-    [18e-6,25.0],
-    [17e-6,25.0],
-    [16e-6,25.0],
-    [15e-6,25.0],
-    [14e-6,25.0],
-    [13e-6,25.0],
-    [12.5e-6,25.0],
-    [12e-6,25.0],
-    [11.5e-6,25.0],
-    [11e-6,25.0],
-
-    [28e-6,T2],
-    [25e-6,T2],
-    [24e-6,T2],
-    [23e-6,T2],
-    [22e-6,T2],
-    [21e-6,T2],
-    [20e-6,T2],
-    [19e-6,T2],
-    [18e-6,T2],
-    [17e-6,T2],
-    [16e-6,T2],
-    [15e-6,T2],
-    [14e-6,T2],
-    [13e-6,T2],
-    [12.5e-6,T2],
-    [12e-6,T2],
-    [11.5e-6,T2],
-    [11e-6,T2],
-] # Arranged a distance,temp
+T0 = 26
+T1 = 26.5
+T2 = 27
+T3 = 27.5
+T4 = 28
+T5 = 28.5
+T6 = 28.8
+T7 = 28.9
+T8 = 28.95
+temperatures = [26,26.5,27,27.5,28]
+for i in range(10):
+    temperatures.append(28+(i+1)/10)
+#print('temperatures', temperatures)
+distances = [30e-6,25e-6,24e-6,23e-6,22e-6,21e-6,20e-6,19e-6,18e-6,17e-6,16e-6,15e-6,14e-6,13e-6,12.5e-6,12e-6,11.5e-6,11e-6]
+#print('Distances',distances)
+experiment_schedule = []
+for temp in temperatures:
+    for distance in distances:
+        experiment_schedule.append([distance,temp])
+#print(experiment_schedule)
+# #experiment_schedule = [
+#
+#     [30e-6,T0],
+#     [25e-6,T0],
+#     [24e-6,T0],
+#     [23e-6,T0],
+#     [22e-6,T0],
+#     [21e-6,T0],
+#     [20e-6,T0],
+#     [19e-6,T0],
+#     [18e-6,T0],
+#     [17e-6,T0],
+#     [16e-6,T0],
+#     [15e-6,T0],
+#     [14e-6,T0],
+#     [13e-6,T0],
+#     [12.5e-6,T0],
+#     [12e-6,T0],
+#     [11.5e-6,T0],
+#     [11e-6,T0],
+#
+#     [30e-6,T1],
+#     [28e-6,T1],
+#     [25e-6,T1],
+#     [24e-6,T1],
+#     [23e-6,T1],
+#     [22e-6,T1],
+#     [21e-6,T1],
+#     [20e-6,T1],
+#     [19e-6,T1],
+#     [18e-6,T1],
+#     [17e-6,T1],
+#     [16e-6,T1],
+#     [15e-6,T1],
+#     [14e-6,T1],
+#     [13e-6,T1],
+#     [12.5e-6,T1],
+#     [12e-6,T1],
+#     [11.5e-6,T1],
+#     [11e-6,T1],
+#
+#     [30e-6,T2],
+#     [28e-6,T2],
+#     [25e-6,T2],
+#     [24e-6,T2],
+#     [23e-6,T2],
+#     [22e-6,T2],
+#     [21e-6,T2],
+#     [20e-6,T2],
+#     [19e-6,T2],
+#     [18e-6,T2],
+#     [17e-6,T2],
+#     [16e-6,T2],
+#     [15e-6,T2],
+#     [14e-6,T2],
+#     [13e-6,T2],
+#     [12.5e-6,T2],
+#     [12e-6,T2],
+#     [11.5e-6,T2],
+#     [11e-6,T2],
+#
+#     [30e-6,T3],
+#     [28e-6,T3],
+#     [25e-6,T3],
+#     [24e-6,T3],
+#     [23e-6,T3],
+#     [22e-6,T3],
+#     [21e-6,T3],
+#     [20e-6,T3],
+#     [19e-6,T3],
+#     [18e-6,T3],
+#     [17e-6,T3],
+#     [16e-6,T3],
+#     [15e-6,T3],
+#     [14e-6,T3],
+#     [13e-6,T3],
+#     [12.5e-6,T3],
+#     [12e-6,T3],
+#     [11.5e-6,T3],
+#     [11e-6,T3],
+# ]
 ############### Main script starts here ####################################
 control_parameters = get_default_control_parameters()
+control_parameters['experiment_schedule'] = experiment_schedule# Arranged a distance,temp
+
 # Create camera and set defaults
 cam = TC.get_camera()
 cam.set_defaults(left=control_parameters['AOI'][0],right=control_parameters['AOI'][1],top=control_parameters['AOI'][2],bot=control_parameters['AOI'][3],n_frames=1)
