@@ -31,6 +31,24 @@ def GSW(N,M,Delta=None,image_width=1080,nbr_iterations=30):
         print('Iteration: ',J)
 
     return np.reshape(128+Phi*255/(2*pi),(image_width,image_width))
+def  GS(N,M,Delta=None,image_width=1080,nbr_iterations=30):
+    if Delta is None:
+        Delta = SLM.get_delta(image_width=image_width)
+    Phi = RS(N,M,Delta) # Initial guess
+    W = np.ones((M,1))
+    I_m =np.uint8(np.ones((M,1)))
+    I_N = np.uint8(np.ones((1,N)))
+    Delta_J = np.exp(1j*Delta)
+    for J in range(nbr_iterations):
+        V = np.reshape( np.transpose( np.mean((np.exp(1j*(I_m*Phi)-Delta)),axis=1) ),(M,1))
+        Phi = np.angle(sum(np.multiply(Delta_J,np.divide(V,abs(V)))*I_N ))
+        print(J)
+    result = np.reshape(128+Phi*255/(2*pi),(image_width,image_width))
+    #print(np.min(result),np.max(result))
+    #result = result- np.min(result)
+    #result = result*(255/np.max(result))
+    print(np.min(result),np.max(result))
+    return  result#np.reshape(128+Phi*255/(2*pi),(image_width,image_width))#np.reshape(128+Phi*255/(2*pi),(image_width,image_width))
 def get_default_xm_ym():
     '''
     Generates default x,y positions for particle
@@ -55,6 +73,23 @@ def get_default_xm_ym():
         #ym[i*fac+3] = d0y+d/2*(i-1)
 
     return xm,ym
+def get_Isaac_xm_ym(d=30e-6):
+    d0x = -115e-6
+    d0y = -115e-6
+    xm = np.zeros((2))
+    ym = np.zeros((2))
+
+    xm[0] = d0x
+    xm[1] = d0x
+    #xm[2] = d0x
+    #xm[3] = d0x
+
+    ym[0] = d0y
+    ym[1] = d0y+d
+    #ym[2] = d0y
+    #ym[3] = d0y+d
+
+    return xm,ym
 def get_delta(image_width = 1080,xm=[],ym=[]):
     """
     Calculates delta in paper. I.e the phase shift of light when travelling from
@@ -77,7 +112,6 @@ def get_delta(image_width = 1080,xm=[],ym=[]):
         xm,ym = get_default_xm_ym()
     M = len(xm) # Total number of traps
     zm = np.zeros((M))
-
     Delta=np.zeros((M,N))
     for m in range(M):
 
