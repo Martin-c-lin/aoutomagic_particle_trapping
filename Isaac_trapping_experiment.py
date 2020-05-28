@@ -16,6 +16,8 @@ from cv2 import VideoWriter, VideoWriter_fourcc
 from tkinter import *
 import PIL.Image, PIL.ImageTk
 
+# TODO Combine this with Automagic trapping
+
 def get_default_control_parameters(recording_path=None):
     '''
     Dictionary containing primarily parameters used for specifying the experiment and synchronizing
@@ -83,7 +85,7 @@ def get_default_control_parameters(recording_path=None):
     'SLM_iterations':30,
     'trap_separation':20e-6,
     'new_video':False,
-    'recording_duration':200,
+    'recording_duration':1800,
     'experiment_schedule':[20e-6,25],
     'experiment_progress':0, # number of experiments run
     }
@@ -113,7 +115,6 @@ def terminate_threads():
     '''
     control_parameters['continue_capture'] = False # All threds exits their main loop once this parameter is changed
     control_parameters['motor_running'] = False
-    #messagebox.showinfo('Terminating threads')
     #print('Terminating threads \n')
     time.sleep(1)
     global thread_list
@@ -174,7 +175,8 @@ def start_threads(cam=True,motor_x=True,motor_y=True,motor_z=True,slm=True,track
         print('Tracking thread started')
 
     if temp:
-        temperature_thread = TemperatureThread(7,'Temperature_thread')
+        temperature_controller = TemperatureControllerTED4015.TED4015()
+        temperature_thread = TemperatureThread(7,'Temperature_thread',temperature_controller=temperature_controller)
         temperature_thread.start()
         thread_list.append(temperature_thread)
         print('Temperature thread started')
@@ -337,9 +339,11 @@ class TemperatureThread(threading.Thread):
             # for temperature to be considered as stable.
             if temperature_controller is not None:
                 self.temperature_controller = temperature_controller
+                control_parameters['starting_temperature'] = self.temperature_controller.measure_temperature()
+                control_parameters['current_temperature'] = control_parameters['starting_temperature']
             else:
                 try:
-                    self.temperature_controller = TemperatureControllerTED4015.TED4015_controller()
+                    self.temperature_controller = TemperatureControllerTED4015.TED4015()
                     control_parameters['starting_temperature'] = self.temperature_controller.measure_temperature()
                     control_parameters['current_temperature'] = control_parameters['starting_temperature']
                 except:
@@ -617,10 +621,10 @@ class CameraThread(threading.Thread):
         Funciton for creating a VideoWriter
         '''
         now = datetime.datetime.now()
-        fourcc = VideoWriter_fourcc(*'MP42')
+        fourcc = VideoWriter_fourcc(*'MJPG')#(*'XVID') #VideoWriter_fourcc(*'MP42')
         image_width = control_parameters['AOI'][1]-control_parameters['AOI'][0]
         image_height = control_parameters['AOI'][3]-control_parameters['AOI'][2]
-        video_name = control_parameters['recording_path']+'/moive-'+str(now.hour)+\
+        video_name = control_parameters['recording_path']+'/video-'+str(now.hour)+\
             '-'+str(now.minute)+'-'+str(now.second)+'T'+str(round(control_parameters['setpoint_temperature'],2))+\
             'C_'+str(control_parameters['trap_separation'])+'um.avi'
         video = VideoWriter(video_name, fourcc, float(control_parameters['framerate']), (image_width, image_height),isColor=False)
@@ -950,7 +954,7 @@ def zoom_in(margin=50):
     down = int(down // 10 * 10)
 
     control_parameters['framerate'] = 150 # Todo fix this so that it is better
-    set_AOI(left=710,right=820,up=580,down=800)
+    set_AOI(left=700,right=800,up=580,down=800)
 def zoom_out():
     set_AOI(left=0,right=1200,up=0,down=1000)
     control_parameters['framerate'] = 10
@@ -1004,107 +1008,15 @@ def move_particles_slowly(last_d = 30e-6):
             time.sleep(1)
     return
 
-T0 = 26
-T1 = 26.5
-T2 = 27
-T3 = 27.5
-T4 = 28
-T5 = 28.5
-T6 = 28.8
-T7 = 28.9
-T8 = 28.95
-temperatures = [26,26.5,27,27.5,28]
-for i in range(10):
-    temperatures.append(28+(i+1)/10)
-#print('temperatures', temperatures)
-distances = [30e-6,25e-6,24e-6,23e-6,22e-6,21e-6,20e-6,19e-6,18e-6,17e-6,16e-6,15e-6,14e-6,13e-6,12.5e-6,12e-6,11.5e-6,11e-6]
-#print('Distances',distances)
+temperatures = [25]
+#for i in range(8):
+#    temperatures.append(28+(i+1)/10)
+distances = [12e-6 +i*4e-6 for i in range(6)]#[33e-6,30e-6,25e-6,24e-6,23e-6,22e-6,21e-6,20e-6,19e-6,18e-6,17e-6,16e-6,15e-6,14e-6,13e-6,12.5e-6,12e-6,11.5e-6,11e-6]
 experiment_schedule = []
 for temp in temperatures:
     for distance in distances:
         experiment_schedule.append([distance,temp])
-#print(experiment_schedule)
-# #experiment_schedule = [
-#
-#     [30e-6,T0],
-#     [25e-6,T0],
-#     [24e-6,T0],
-#     [23e-6,T0],
-#     [22e-6,T0],
-#     [21e-6,T0],
-#     [20e-6,T0],
-#     [19e-6,T0],
-#     [18e-6,T0],
-#     [17e-6,T0],
-#     [16e-6,T0],
-#     [15e-6,T0],
-#     [14e-6,T0],
-#     [13e-6,T0],
-#     [12.5e-6,T0],
-#     [12e-6,T0],
-#     [11.5e-6,T0],
-#     [11e-6,T0],
-#
-#     [30e-6,T1],
-#     [28e-6,T1],
-#     [25e-6,T1],
-#     [24e-6,T1],
-#     [23e-6,T1],
-#     [22e-6,T1],
-#     [21e-6,T1],
-#     [20e-6,T1],
-#     [19e-6,T1],
-#     [18e-6,T1],
-#     [17e-6,T1],
-#     [16e-6,T1],
-#     [15e-6,T1],
-#     [14e-6,T1],
-#     [13e-6,T1],
-#     [12.5e-6,T1],
-#     [12e-6,T1],
-#     [11.5e-6,T1],
-#     [11e-6,T1],
-#
-#     [30e-6,T2],
-#     [28e-6,T2],
-#     [25e-6,T2],
-#     [24e-6,T2],
-#     [23e-6,T2],
-#     [22e-6,T2],
-#     [21e-6,T2],
-#     [20e-6,T2],
-#     [19e-6,T2],
-#     [18e-6,T2],
-#     [17e-6,T2],
-#     [16e-6,T2],
-#     [15e-6,T2],
-#     [14e-6,T2],
-#     [13e-6,T2],
-#     [12.5e-6,T2],
-#     [12e-6,T2],
-#     [11.5e-6,T2],
-#     [11e-6,T2],
-#
-#     [30e-6,T3],
-#     [28e-6,T3],
-#     [25e-6,T3],
-#     [24e-6,T3],
-#     [23e-6,T3],
-#     [22e-6,T3],
-#     [21e-6,T3],
-#     [20e-6,T3],
-#     [19e-6,T3],
-#     [18e-6,T3],
-#     [17e-6,T3],
-#     [16e-6,T3],
-#     [15e-6,T3],
-#     [14e-6,T3],
-#     [13e-6,T3],
-#     [12.5e-6,T3],
-#     [12e-6,T3],
-#     [11.5e-6,T3],
-#     [11e-6,T3],
-# ]
+print(experiment_schedule)
 ############### Main script starts here ####################################
 control_parameters = get_default_control_parameters()
 control_parameters['experiment_schedule'] = experiment_schedule# Arranged a distance,temp
