@@ -53,8 +53,8 @@ def get_default_control_parameters(recording_path=None):
     'framerate':10,
     'recording':False,
     'tracking_on':False,
-    'setpoint_temperature':25,
-    'current_temperature':25,
+    'setpoint_temperature':30,
+    'current_temperature':30,
     'starting_temperature':25,
     'temperature_stable':False,
     'search_direction':'right',
@@ -85,7 +85,7 @@ def get_default_control_parameters(recording_path=None):
     'SLM_iterations':30,
     'trap_separation':20e-6,
     'new_video':False,
-    'recording_duration':1800,
+    'recording_duration':1000,
     'experiment_schedule':[20e-6,25],
     'experiment_progress':0, # number of experiments run
     }
@@ -512,7 +512,6 @@ class SLM_window(Frame):
         self.img = Label(self,image=self.photo)
         self.img.image = self.photo # This ate lots of memory
         self.img.place(x=0, y=0) # Do not think this is needed
-        #self.after(self.delay, self.update)
 class MotorThread(threading.Thread):
     '''
     Thread in which a motor is controlled. The motor object is available globally.
@@ -621,7 +620,7 @@ class CameraThread(threading.Thread):
         Funciton for creating a VideoWriter
         '''
         now = datetime.datetime.now()
-        fourcc = VideoWriter_fourcc(*'MJPG')#(*'XVID') #VideoWriter_fourcc(*'MP42')
+        fourcc = VideoWriter_fourcc(*'MJPG')
         image_width = control_parameters['AOI'][1]-control_parameters['AOI'][0]
         image_height = control_parameters['AOI'][3]-control_parameters['AOI'][2]
         video_name = control_parameters['recording_path']+'/video-'+str(now.hour)+\
@@ -956,8 +955,9 @@ def zoom_in(margin=50):
     control_parameters['framerate'] = 150 # Todo fix this so that it is better
     set_AOI(left=700,right=800,up=580,down=800)
 def zoom_out():
-    set_AOI(left=0,right=1200,up=0,down=1000)
+    # Zooms out the camera and sets default framerate
     control_parameters['framerate'] = 10
+    set_AOI(left=0,right=1200,up=0,down=1000)
 def search_for_particles():
     '''
     Function for searching after particles. Threats the sample as a grid and systmatically searches it
@@ -1008,10 +1008,10 @@ def move_particles_slowly(last_d = 30e-6):
             time.sleep(1)
     return
 
-temperatures = [25]
+temperatures = [34.3,34.35,34.4,34.41,34.42,34.43,34.44,34.45,34.46,34.47,34.48,34.49,34.5]
 #for i in range(8):
 #    temperatures.append(28+(i+1)/10)
-distances = [12e-6 +i*4e-6 for i in range(6)]#[33e-6,30e-6,25e-6,24e-6,23e-6,22e-6,21e-6,20e-6,19e-6,18e-6,17e-6,16e-6,15e-6,14e-6,13e-6,12.5e-6,12e-6,11.5e-6,11e-6]
+distances = [11e-6,12e-6,30e-6 ]#[33e-6,30e-6,25e-6,24e-6,23e-6,22e-6,21e-6,20e-6,19e-6,18e-6,17e-6,16e-6,15e-6,14e-6,13e-6,12.5e-6,12e-6,11.5e-6,11e-6]
 experiment_schedule = []
 for temp in temperatures:
     for distance in distances:

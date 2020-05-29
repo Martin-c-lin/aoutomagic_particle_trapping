@@ -73,6 +73,17 @@ def get_default_xm_ym():
         #ym[i*fac+3] = d0y+d/2*(i-1)
 
     return xm,ym
+def get_xm_ym_rect(nbr_rows,nbr_columns, d=30e-6, d0x=-115e-6, d0y=-115e-6):
+    '''
+    Generates xm,ymm in a rectangular grid with a particle-particle distance of d.
+    '''
+    xm = np.zeros((nbr_rows*nbr_columns))
+    ym = np.zeros((nbr_rows*nbr_columns))
+
+    for i in range(nbr_rows):
+        for j in range(nbr_columns):
+            xm[i*nbr_columns+j] = d0x + d*i
+
 def get_Isaac_xm_ym(d=30e-6):
     d0x = -115e-6
     d0y = -115e-6
