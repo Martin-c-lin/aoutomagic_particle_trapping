@@ -225,7 +225,7 @@ def create_buttons(top):
         entry = iterations_entry.get()
         try:
             iterations = int(entry)
-            if 1<iterations<40:
+            if 1<iterations<1000:
                 control_parameters['SLM_iterations'] = iterations
                 print("Number SLM iterations set to ",iterations)
                 control_parameters['new_phasemask'] = True
