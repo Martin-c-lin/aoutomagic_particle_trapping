@@ -493,14 +493,14 @@ class SLM_window(Frame):
     def __init__(self, master=None):
         Frame.__init__(self, master)
         self.master = master
-        self.master.geometry("1920x1080+2340+0")
+        self.master.geometry("1920x1080+1920+0")#("1920x1080+2340+0")
         self.pack(fill=BOTH, expand=1)
 
         load = PIL.Image.open("SLM_16p_1080x1080.jpg")
 
         render = PIL.ImageTk.PhotoImage(load)
         self.img = Label(self, image=render)
-        self.img.place(x=0, y=0)
+        self.img.place(x=420, y=0)
         self.img.image = image
         ####
         self.delay = 500
@@ -511,7 +511,7 @@ class SLM_window(Frame):
         del self.img.image
         self.img = Label(self,image=self.photo)
         self.img.image = self.photo # This ate lots of memory
-        self.img.place(x=0, y=0) # Do not think this is needed
+        self.img.place(x=420, y=0) # Do not think this is needed
 class MotorThread(threading.Thread):
     '''
     Thread in which a motor is controlled. The motor object is available globally.
@@ -1011,10 +1011,10 @@ def move_particles_slowly(last_d = 30e-6):
             time.sleep(1)
     return
 
-temperatures = [ 34, 34.5, 34.7, 34.75, 34.8, 34.85, ]
+temperatures = [34.4,34.45, 34.5, 34.55, 34.6, 34.65]
 #for i in range(8):
 #    temperatures.append(28+(i+1)/10)
-distances = [ 11e-6, 12e-6,15e-6, 25e-6,30e-6,35e-6 ]#[33e-6,30e-6,25e-6,24e-6,23e-6,22e-6,21e-6,20e-6,19e-6,18e-6,17e-6,16e-6,15e-6,14e-6,13e-6,12.5e-6,12e-6,11.5e-6,11e-6]
+distances = [ 11e-6, 12e-6,15e-6, 30e-6 ]#[33e-6,30e-6,25e-6,24e-6,23e-6,22e-6,21e-6,20e-6,19e-6,18e-6,17e-6,16e-6,15e-6,14e-6,13e-6,12.5e-6,12e-6,11.5e-6,11e-6]
 experiment_schedule = []
 for temp in temperatures:
     for distance in distances:
