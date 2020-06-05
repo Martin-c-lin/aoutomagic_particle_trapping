@@ -7,7 +7,6 @@ import find_particle_threshold as fpt
 from instrumental import u
 import matplotlib.pyplot as plt
 import numpy as np
-# from keras.models import load_model # Not curently in use
 import threading,time,cv2,queue,copy,sys,tkinter,os
 from tkinter import messagebox
 from functools import partial
@@ -341,7 +340,7 @@ class TkinterDisplay:
                 self.new.focus()
         except:
             self.new = tkinter.Toplevel(self.window)
-            _class(self.new)
+            self.SLM_Window = _class(self.new)
     def snapshot(self):
          global image
          global control_parameters
@@ -406,6 +405,9 @@ class TkinterDisplay:
     def update(self):
          # Get a frame from the video source
          global image
+         if control_parameters['phasemask_updated']:
+              self.SLM_Window.update()
+              control_parameters['phasemask_updated'] = False
          self.update_indicators()
          self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(self.resize_display_image(image)))
          self.canvas.create_image(0, 0, image = self.photo, anchor = tkinter.NW) # need to use a compatible image type
@@ -415,26 +417,25 @@ class SLM_window(Frame):
     def __init__(self, master=None):
         Frame.__init__(self, master)
         self.master = master
-        self.master.geometry("1920x1080+2340+0")
+        self.master.geometry("1920x1080+1920+0")#("1920x1080+2340+0")
         self.pack(fill=BOTH, expand=1)
 
         load = PIL.Image.open("SLM_16p_1080x1080.jpg")
 
         render = PIL.ImageTk.PhotoImage(load)
         self.img = Label(self, image=render)
-        self.img.place(x=0, y=0)
-        # TODO FIX THE MEMORY ISSUE AS IN THE ISAAC_EXPERIMENT VERSIO!!!! REALLY IMPORTANTS
-
+        self.img.place(x=420, y=0)
+        self.img.image = image
         ####
         self.delay = 500
         self.update()
     def update(self):
         # This implementation does work but is perhaps a tiny bit janky
         self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(control_parameters['phasemask']))
-        self.img = Label(self, image=self.photo)
-        self.img.image = self.photo
-        self.img.place(x=0, y=0) # Do not think this is needed
-        self.after(self.delay, self.update)
+        del self.img.image
+        self.img = Label(self,image=self.photo)
+        self.img.image = self.photo # This ate lots of memory
+        self.img.place(x=420, y=0) # Do not think this is needed
 class DisplayThread(threading.Thread):
     '''
     Thread class for plotting the result in the BG.
