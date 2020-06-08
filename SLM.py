@@ -3,11 +3,63 @@ import matplotlib.pyplot as plt
 from math import ceil,pi
 from random import random
 from time import time
+from math import atan2
 # TODO make all this into functions and investigate if we can change to smaller
 # datatypes to improve performance
 # See if smaller datatypes and upscaling can be used to improve performance
 
 # random mask encoding algorithm  (RM)
+
+def atan2_vec_2d(Y,X):
+    '''
+    Function for calculating atan2 of 2 2d arrays of coordinate positions(X,Y)
+
+    Parameters
+    ----------
+    Y : 2-d array of y coordinates
+    X : 2-d array of x-coordinates
+
+    Returns
+    -------
+    2d-array of same shape as x and y.
+    None if x and y are not of the same shape
+
+    '''
+    shape = np.shape(X)
+
+    if np.shape(X)==np.shape(Y):
+
+        Y = np.reshape(Y,shape[0]*shape[1])
+        X = np.reshape(X,shape[0]*shape[1])
+        res = np.zeros(len(X))
+        for idx in range(len(X)):
+            res[idx] = atan2(Y[idx],X[idx])
+        return np.reshape(res,shape)
+    else:
+        print('Error, vectors not of equal length', len(X),' is not equal to ',len(Y))
+        return None
+
+def get_LGO(image_width=1080,order = -8):
+    '''
+    Parameters
+    ----------
+    image_width : TYPE, optional
+        DESCRIPTION. The default is 1080.
+
+    Returns
+    -------
+    LGO : TYPE
+        LGO, phase shift required to delta to get a laguerre gaussian instead of a gaussian.
+
+    '''
+
+    xc = image_width/2
+    yc = image_width/2
+    xxx,yyy = np.meshgrid(np.linspace(1,image_width,image_width),np.linspace(1,image_width,image_width))
+    LGO = np.mod((order * atan2_vec_2d(yyy-yc,xxx-xc)) ,(2*pi)) # Ther should maybe be a +pi before mod 2pi
+
+    return LGO
+
 def RM(N,M,Delta,image_width):
     return Delta[np.random.randint(0,M,N),range(N)]
 # Random Superposition Algorithm (SR)
@@ -24,11 +76,11 @@ def GSW(N,M,Delta=None,image_width=1080,nbr_iterations=30):
     I_N = np.uint8(np.ones((1,N)))
     Delta_J = np.exp(1j*Delta)
     for J in range(nbr_iterations):
-        V = np.reshape(np.mean((np.exp(1j*(I_m*Phi)-Delta)),axis=1),(M,1)) # axis = 0
+        V = np.reshape(np.mean((np.exp(1j*(I_m*Phi)-Delta)),axis=1),(M,1))
         V_abs = abs(V)
         W = np.mean(V_abs)*np.divide(W,V_abs)
-        Phi = np.angle(sum(np.multiply(Delta_J, np.divide(np.multiply(W,V),V_abs)*I_N))) # axis = 0
-        print('Iteration: ',J)
+        Phi = np.angle(sum(np.multiply(Delta_J, np.divide(np.multiply(W,V),V_abs)*I_N)))
+        print('Iteration: ', J+1, 'of ', nbr_iterations)
 
     return np.reshape(128+Phi*255/(2*pi),(image_width,image_width))
 def  GS(N,M,Delta=None,image_width=1080,nbr_iterations=30):
@@ -42,16 +94,13 @@ def  GS(N,M,Delta=None,image_width=1080,nbr_iterations=30):
     for J in range(nbr_iterations):
         V = np.reshape( np.transpose( np.mean((np.exp(1j*(I_m*Phi)-Delta)),axis=1) ),(M,1))
         Phi = np.angle(sum(np.multiply(Delta_J,np.divide(V,abs(V)))*I_N ))
-        print(J)
+        print('Iteration: ', J+1, 'of ', nbr_iterations)
     result = np.reshape(128+Phi*255/(2*pi),(image_width,image_width))
-    #print(np.min(result),np.max(result))
-    #result = result- np.min(result)
-    #result = result*(255/np.max(result))
-    print(np.min(result),np.max(result))
-    return  result#np.reshape(128+Phi*255/(2*pi),(image_width,image_width))#np.reshape(128+Phi*255/(2*pi),(image_width,image_width))
+    return  result
 def get_default_xm_ym():
     '''
-    Generates default x,y positions for particle
+    Generates default x,y positions for particle.
+    Legacy funciton, use get_xm_ym_rect instead
     '''
     M = 9 # Changed to 9 from 16
     xm = np.zeros((M))
@@ -66,16 +115,14 @@ def get_default_xm_ym():
         xm[i*fac+0] = d0x-d/2
         xm[i*fac+1] = d0x
         xm[i*fac+2] = d0x+d/2
-        #xm[i*fac+3] = d0x+d
         ym[i*fac+0] = d0y+d/2*(i-1)
         ym[i*fac+1] = d0y+d/2*(i-1)
         ym[i*fac+2] = d0y+d/2*(i-1)
-        #ym[i*fac+3] = d0y+d/2*(i-1)
 
     return xm,ym
 def get_xm_ym_rect(nbr_rows,nbr_columns, dx=30e-6,dy=30e-6, d0x=-115e-6, d0y=-115e-6):
     '''
-    Generates xm,ymm in a rectangular grid with a particle-particle distance of d.
+    Generates xm,ym in a rectangular grid with a particle-particle distance of d.
     '''
     if nbr_rows<1 or nbr_columns<1:
         return [],[]
@@ -85,7 +132,7 @@ def get_xm_ym_rect(nbr_rows,nbr_columns, dx=30e-6,dy=30e-6, d0x=-115e-6, d0y=-11
     for i in range(nbr_rows):
         for j in range(nbr_columns):
             xm[i*nbr_columns+j] = d0x + dx*j
-            ym[i*nbr_columns+j] = d0x + dy*i
+            ym[i*nbr_columns+j] = d0y + dy*i
     return xm,ym
 
 def get_Isaac_xm_ym(d=30e-6):
@@ -96,16 +143,12 @@ def get_Isaac_xm_ym(d=30e-6):
 
     xm[0] = d0x
     xm[1] = d0x
-    #xm[2] = d0x
-    #xm[3] = d0x
 
     ym[0] = d0y
     ym[1] = d0y+d
-    #ym[2] = d0y
-    #ym[3] = d0y+d
 
     return xm,ym
-def get_delta(image_width = 1080,xm=[],ym=[]):
+def get_delta(image_width = 1080,xm=[],ym=[],use_LGO=[False],order=-8):
     """
     Calculates delta in paper. I.e the phase shift of light when travelling from
     the SLM to the trap position for a specific set of points
@@ -125,23 +168,27 @@ def get_delta(image_width = 1080,xm=[],ym=[]):
 
     if len(xm)<1 or len(ym)<1:
         xm,ym = get_default_xm_ym()
+        use_LGO = [False for i in range(len(xm))]
+    if True in use_LGO:
+        LGO = get_LGO(image_width,order=order)
     M = len(xm) # Total number of traps
     zm = np.zeros((M))
     Delta=np.zeros((M,N))
     for m in range(M):
 
-
         # Calculate delta according to eq : in paper
         # Using python "%" instead of Matlabs "rem"
         Delta[m,:]=np.reshape(2*pi*p/lambda_/f*((np.transpose(I)*x*xm[m]+(y*I)*ym[m]) + 1/(2*f)*zm[m] * ( (np.transpose(I)*x)**2 + (y*I)**2 )) % (2*pi),(1,N))
-
+        if len(use_LGO)>m and use_LGO[m]: # TODO, check if this is the way to add this
+            Delta[m,:] += np.reshape(LGO,(N))
+            Delta[m,:] = Delta[m,:] % (2*pi)
         # TODO Add z-dependence to to ensuere that this works also in 3d
-        # Can we remove the %2pi and * 2 *pi?
     return Delta,N,M
 def setup_fullscreen_plt_image():
     '''
     This script magically sets up pyplot lib so it displays an image on a secondary display
     in full screen.
+    Legacy function. USe the SLM_controller script with tkinter windows instead
     '''
     plt.switch_backend('QT4Agg')
 
@@ -154,7 +201,6 @@ def setup_fullscreen_plt_image():
     # hack end
 
     plt.figure()
-    #plt.imshow(image,cmap='gist_gray')
     plt.rcParams['toolbar'] = 'None'
     fig = plt.gcf()
     fig.canvas.window().statusBar().setVisible(False)
