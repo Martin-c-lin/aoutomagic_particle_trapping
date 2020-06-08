@@ -152,6 +152,8 @@ def start_threads():
     thread_list.append(tracking_thread)
     thread_list.append(slm_thread)
     thread_list.append(z_thread)
+
+
 def create_buttons(self,top):
     def get_y_separation(start=50, distance=40):
         # Simple generator to avoid printing all the y-positions of the
@@ -334,6 +336,8 @@ class CreateSLMThread(threading.Thread):
                 # Acknowledge that a new phasemask was recived
 
             time.sleep(1)
+
+
 class TemperatureThread(threading.Thread):
         '''
         Class for running the temperature controller in the background
@@ -532,12 +536,14 @@ class TkinterDisplay:
          self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(self.resize_display_image(image)))
          self.canvas.create_image(0, 0, image = self.photo, anchor = tkinter.NW) # need to use a compatible image type
          self.window.after(self.delay, self.update)
+
+
 class SLM_window(Frame):
     global c_p
     def __init__(self, master=None):
         Frame.__init__(self, master)
         self.master = master
-        self.master.geometry("1920x1080+1920+0")#("1920x1080+2340+0")
+        self.master.geometry("1920x1080+1920+0")
         self.pack(fill=BOTH, expand=1)
 
         load = PIL.Image.open("SLM_16p_1080x1080.jpg")
@@ -605,6 +611,8 @@ class MotorThread(threading.Thread):
             time.sleep(0.1) # To give other threads some time to work
 
        TM.DisconnectMotor(self.motor)
+
+
 class z_movement_thread(threading.Thread):
     '''
     Thread for controling movement of the objective in z-directio.
@@ -653,6 +661,8 @@ class z_movement_thread(threading.Thread):
                 print('homing z')
             time.sleep(0.3)
             c_p['motor_current_pos'][2] = self.piezo.get_position()
+
+
 class CameraThread(threading.Thread):
    def __init__(self, threadID, name):
       threading.Thread.__init__(self)
@@ -746,7 +756,6 @@ class TrackingThread(threading.Thread):
 
             if c_p['tracking_on']:
 
-#               if not c_p['zoomed_in']:
                    '''
                    We are in full frame mode looking for a particle
                    '''
@@ -793,6 +802,8 @@ class TrackingThread(threading.Thread):
                    if False not in c_p['traps_occupied']:
                            c_p['new_phasemask'] = True
             time.sleep(0.3) # Needed to prevent this thread from running too fast
+
+
 def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
     '''
     Function for changing the Area Of Interest for the camera to the box specified by
@@ -835,6 +846,8 @@ def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
     c_p['xy_movement_limit'] = 40
     c_p['motor_locks'][0].release()
     c_p['motor_locks'][1].release()
+
+
 def predict_particle_position(network,half_image_width=50,network_image_width=101,print_position=False):
     '''
     Function for making g a prediciton with a network and automatically updating the center position array.
@@ -1041,9 +1054,13 @@ def zoom_in(margin=50):
 
     c_p['framerate'] = 100 # Todo fix this so that it is better
     set_AOI(left=left, right=right, up=up, down=down)
+
+
 def zoom_out():
     set_AOI(left=0, right=1200, up=0, down=1000)
     c_p['framerate'] = 10
+
+
 def search_for_particles():
     '''
     Function for searching after particles. Threats the sample as a grid and
