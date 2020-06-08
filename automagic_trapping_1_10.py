@@ -443,6 +443,7 @@ class TkinterDisplay:
         start_threads()
 
         self.window.mainloop()
+
     def create_SLM_window(self, _class):
         try:
             if self.new.state() == "normal":
@@ -452,11 +453,11 @@ class TkinterDisplay:
             self.SLM_Window = _class(self.new)
 
     def snapshot(self):
-         global image
-         global c_p
-         cv2.imwrite(c_p['recording_path'] + "/frame-" +\
-                     time.strftime("%d-%m-%Y-%H-%M-%S") +\
-                     ".jpg", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+        global image
+        global c_p
+        cv2.imwrite(c_p['recording_path'] + "/frame-" +\
+                    time.strftime("%d-%m-%Y-%H-%M-%S") +\
+                    ".jpg", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
 
     def create_indicators(self):
         global c_p
