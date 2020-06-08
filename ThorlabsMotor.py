@@ -16,13 +16,6 @@ from Thorlabs.MotionControl.KCube.DCServoCLI import *
 from Thorlabs.MotionControl.GenericMotorCLI import MotorDirection
 from Thorlabs.MotionControl.KCube.InertialMotorCLI import *
 
-# DeviceManagerCLI.BuildDeviceList()
-# DeviceManagerCLI.GetDeviceListSize()
-
-# Relevant parameters
-
-
-# TODO change this to a class?
 timeoutVal = 30000
 
 class PiezoMotor():
@@ -37,19 +30,23 @@ class PiezoMotor():
         # Moves motor to a specified position
         try:
             self.motor.MoveTo(self.channel,position,self.timeout)
+            return True
         except:
             print('Could not move to target position')
+            return False
     def set_timeout(self,timeout):
         if timeout>=1:
             self.timeout = timeout
+            return True
         else:
             print("Timeout NOK")
+            return False
     def get_timeout(self):
         return self.timeout
     def move_relative(self,distance):
         # Moves the piezo a fixed distance
         target_position = self.get_position()+distance
-        self.move_to_position(target_position)
+        return self.move_to_position(target_position)
     def get_position(self):
         # Returns current position of motor
         return self.motor.GetPosition(self.channel)
@@ -109,10 +106,6 @@ def InitiateMotor(serialNumber,pollingRate=250):
     motor = KCubeDCServo.CreateKCubeDCServo(serialNumber)
     for attempts in range(3):
         try:
-            # DeviceManagerCLI.BuildDeviceList()
-            # DeviceManagerCLI.GetDeviceListSize()
-            #
-            # motor = KCubeDCServo.CreateKCubeDCServo(serialNumber)
             motor.Connect(serialNumber)
         except:
             print("Connection attempt",attempts,"failed")

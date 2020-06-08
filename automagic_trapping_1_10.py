@@ -44,7 +44,9 @@ def get_default_control_parameters(recording_path=None):
     'AOI':[0,1200,0,1000],
     'new_AOI_camera': False,
     'new_AOI_display': False,
-    'new_phasemask':False, # True if the phasemask is to be udpated
+    'new_phasemask':False,
+    'phasemask_updated':False, # True if the phasemask is to be udpated
+    'SLM_iterations': 30,
     'movement_threshold': 30,
     'framerate':10,
     'recording':False,
@@ -62,8 +64,8 @@ def get_default_control_parameters(recording_path=None):
     'motor_current_pos':[0,0,0], # Current position of x-y motors, needed for z-compensation, z is the last
     'z_starting_position':0, # Where the experiments starts in z position
     'z_movement':0, # Target z-movement in "ticks" positive for up, negative for down
-    'z_x_diff':0,#-200, # Used for compensating drift in z when moving the sample. Caused by sample being slightly tilted Needs to be calibrated
-    'z_y_diff':0,#-400,
+    'z_x_diff':-200, # Used for compensating drift in z when moving the sample. Caused by sample being slightly tilted Needs to be calibrated
+    'z_y_diff':-400,
     'temperature_z_diff':-190,#-200, # How much the objective need to be moved to compensate for the changes in temperature.Measured in [ticks/deg C]
     'return_z_home':False,
     'particle_threshold':120,
@@ -225,7 +227,7 @@ class CreateSLMThread(threading.Thread):
         screen_x = [578,727,877,578,727,877,578,727,877]
         screen_y = [465,465,465,615,615,615,765,765,765]
         Delta,N,M = SLM.get_delta(xm=xm[:nbr_active_traps],ym=ym[:nbr_active_traps] )
-        control_parameters['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=10)
+        control_parameters['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=control_parameters['SLM_iterations'])
 
         control_parameters['traps_absolute_pos'] = np.zeros((2,nbr_active_traps))
         control_parameters['traps_relative_pos'] = np.zeros((2,nbr_active_traps))
@@ -245,8 +247,9 @@ class CreateSLMThread(threading.Thread):
                 if nbr_active_traps<max_nbr_traps+1:
                     # Calcualte new delta and phasemask
                     Delta,N,M = SLM.get_delta(xm=xm[:nbr_active_traps],ym=ym[:nbr_active_traps] )
-                    control_parameters['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=30)
-
+                    control_parameters['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=control_parameters['SLM_iterations'])
+                    control_parameters['phasemask_updated'] = True
+                    control_parameters['new_phasemask'] = False
                     # Update the number of traps and their position
                     control_parameters['traps_absolute_pos'] = np.zeros((2,nbr_active_traps))
                     control_parameters['traps_relative_pos'] = np.zeros((2,nbr_active_traps))
@@ -262,7 +265,7 @@ class CreateSLMThread(threading.Thread):
                     # All traps already in position, no need to calculate phasemask
                     nbr_active_traps = max_nbr_traps
                 # Acknowledge that a new phasemask was recived
-                control_parameters['new_phasemask'] = False
+
             time.sleep(1)
 class TemperatureThread(threading.Thread):
         '''
@@ -406,6 +409,7 @@ class TkinterDisplay:
          # Get a frame from the video source
          global image
          if control_parameters['phasemask_updated']:
+              print('New phasemask')
               self.SLM_Window.update()
               control_parameters['phasemask_updated'] = False
          self.update_indicators()
@@ -560,24 +564,20 @@ class z_movement_thread(threading.Thread):
             self.piezo.move_to_position(self.compensate_focus()+lifting_distance)
 
             if control_parameters['z_movement'] is not 0:
-                #try:
                     control_parameters['z_movement'] = int(control_parameters['z_movement'])
                     # Move up if we are not already up
                     print("Trying to lift particles")
-                    #if self.piezo.get_position()<control_parameters['z_starting_position']+300:
                     if self.piezo.move_relative(control_parameters['z_movement']):
                         lifting_distance += control_parameters['z_movement']
 
                     control_parameters['z_movement'] = 0
-                # except:
-                #     print('Cannot move objective to',control_parameters['z_movement'] )
-                #     print('Resetting target z movement.')
+
             elif control_parameters['return_z_home']:
-                #self.piezo.move_to_position(control_parameters['z_starting_position'])
+                self.piezo.move_to_position(self.compensate_focus()) # Or should it be the starging point? which is best?
                 lifting_distance = 0
                 control_parameters['return_z_home'] = False
                 print('homing z')
-            time.sleep(0.1)
+            time.sleep(0.3)
             control_parameters['motor_current_pos'][2] = self.piezo.get_position()
 class CameraThread(threading.Thread):
    def __init__(self, threadID, name):
@@ -590,7 +590,7 @@ class CameraThread(threading.Thread):
         Funciton for creating a VideoWriter
         '''
         now = datetime.datetime.now()
-        fourcc = VideoWriter_fourcc(*'MP42')
+        fourcc = VideoWriter_fourcc(*'MJPG')
         image_width = control_parameters['AOI'][1]-control_parameters['AOI'][0]
         image_height = control_parameters['AOI'][3]-control_parameters['AOI'][2]
         video_name = control_parameters['recording_path']+'/moive-'+str(now.hour)+'-'+str(now.minute)+'-'+str(now.second)+'.avi'

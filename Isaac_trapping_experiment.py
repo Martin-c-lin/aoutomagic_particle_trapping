@@ -1011,10 +1011,10 @@ def move_particles_slowly(last_d = 30e-6):
             time.sleep(1)
     return
 
-temperatures = [34.4,34.45, 34.5, 34.55, 34.6, 34.65]
+temperatures = [25]
 #for i in range(8):
 #    temperatures.append(28+(i+1)/10)
-distances = [ 11e-6, 12e-6,15e-6, 30e-6 ]#[33e-6,30e-6,25e-6,24e-6,23e-6,22e-6,21e-6,20e-6,19e-6,18e-6,17e-6,16e-6,15e-6,14e-6,13e-6,12.5e-6,12e-6,11.5e-6,11e-6]
+distances = np.linspace(10,35,26)*1e-6#[ 11e-6, 12e-6,15e-6, 30e-6 ]#[33e-6,30e-6,25e-6,24e-6,23e-6,22e-6,21e-6,20e-6,19e-6,18e-6,17e-6,16e-6,15e-6,14e-6,13e-6,12.5e-6,12e-6,11.5e-6,11e-6]
 experiment_schedule = []
 for temp in temperatures:
     for distance in distances:
