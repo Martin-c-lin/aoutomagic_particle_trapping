@@ -22,52 +22,128 @@ class PiezoMotor():
     '''
     Piezo motor class.
     '''
-    def __init__(self,serialNumber,channel,pollingRate=250,timeout=10000):
-        self.motor = InitiatePiezoMotor(serialNumber,pollingRate)
+
+    def __init__(self, serialNumber, channel, pollingRate=250, timeout=10000):
+        self.motor = InitiatePiezoMotor(serialNumber, pollingRate)
         self.channel = channel
         self.timeout = timeout
-    def move_to_position(self,position):
-        # Moves motor to a specified position
+    def move_to_position(self, position):
+        '''
+        Function for moving the motor to a specified position
+
+        Parameters
+        ----------
+        position : Float, given in units of mm.
+            Target position to move motor to.
+
+        Returns
+        -------
+        bool
+            True if move was successfull otherwise false.
+
+        '''
         try:
-            self.motor.MoveTo(self.channel,position,self.timeout)
+            self.motor.MoveTo(self.channel, position, self.timeout)
             return True
-        except:
+        except:  # TODO put in what error to except (timeout I think)
             print('Could not move to target position')
             return False
-    def set_timeout(self,timeout):
-        if timeout>=1:
+    def set_timeout(self, timeout):
+        '''
+        Function for setting the timeout of the piezo motor
+
+        Parameters
+        ----------
+        timeout : int
+            Timeout of motot in ms.
+
+        Returns
+        -------
+        bool
+            True if the timeout was okay and set.
+
+        '''
+        if timeout >= 1:
             self.timeout = timeout
             return True
         else:
             print("Timeout NOK")
             return False
+
     def get_timeout(self):
+        '''
+        Returns
+        -------
+        int
+            Timeout of piezo motor.
+
+        '''
         return self.timeout
-    def move_relative(self,distance):
-        # Moves the piezo a fixed distance
+
+    def move_relative(self, distance):
+        '''
+        Function for moving the piezo a fixed distance relative to it's
+        current position.
+
+        Parameters
+        ----------
+        distance : Int
+            Distance in ticks to move.
+
+        Returns
+        -------
+        boolean
+            True if move was successfull otherwise false.
+
+        '''
         target_position = self.get_position()+distance
         return self.move_to_position(target_position)
+
     def get_position(self):
-        # Returns current position of motor
+        '''
+        Returns
+        -------
+        int
+            Current position of piezo(in ticks).
+
+        '''
         return self.motor.GetPosition(self.channel)
+
     def __del__(self):
         self.motor.StopPolling()
         self.motor.Disconnect()
 def InitiatePiezoMotor(serialNumber,pollingRate=250):
+    '''
+    Function for initalizing a piezo motor.
+
+    Parameters
+    ----------
+    serialNumber : String
+        Serialnumber of controller which is being contacted.
+    pollingRate : float, optional
+        The default is 250. Polling rate of controller.
+
+    Returns
+    -------
+    motor :
+        A PiezoMotor controller object. None if initalization failed.
+
+    '''
     DeviceManagerCLI.BuildDeviceList()
     DeviceManagerCLI.GetDeviceListSize()
-
     motor = KCubeInertialMotor.CreateKCubeInertialMotor(serialNumber)
     for attempts in range(3):
         try:
             motor.Connect(serialNumber)
         except:
-            print("Connection attempt",attempts,"failed")
-            if(attempts<2):
+            print("Connection attempt", attempts, "failed")
+            if attempts < 2:
                 print("Will wait 5 seconds and try again")
                 sleep(5)
             else:
-                print("Cannot connect to device.\n Please ensure that the device is connected to your computer and not in use in any other program!")
+                print("Cannot connect to device.\n Please ensure that the \
+                      device is connected to your computer and not in use in\
+                          any other program!")
     motor.WaitForSettingsInitialized(5000)
     # configure the stage
     motorSettings = motor.GetInertialMotorConfiguration(serialNumber)
@@ -75,9 +151,9 @@ def InitiatePiezoMotor(serialNumber,pollingRate=250):
     # update the RealToDeviceUnit converter
     motorSettings.UpdateCurrentConfiguration()
     # push the settings down to the device
-    currentDeviceSettings = ThorlabsInertialMotorSettings.GetSettings(motorSettings);
+    currentDeviceSettings = ThorlabsInertialMotorSettings.GetSettings(motorSettings)
 
-    motor.SetSettings(currentDeviceSettings, True, False) # What does tru/false mean here?
+    motor.SetSettings(currentDeviceSettings, True, False)
     # Start polling and enable the device
     motor.StartPolling(pollingRate)
     motor.EnableDevice()
@@ -99,7 +175,28 @@ class StageMotor():
     def __del__(self):
         self.motor.StopPolling()
         self.motor.Disconnect()
-def InitiateMotor(serialNumber,pollingRate=250):
+
+
+def InitiateMotor(serialNumber, pollingRate=250, DeviceSettingsName='Z812'):
+    '''
+    Function for initalizing contact with a thorlabs k-cube controller object.
+
+    Parameters
+    ----------
+    serialNumber : String
+        Serial number of device to be connected. Written on the back of the
+    pollingRate : int, optional
+        Polling rate of device in ms. The default is 250.
+    DeviceSettingsName : string, optional
+        Indicates which type of motor is connectd to the controller.
+        The default is 'Z812'.
+
+    Returns
+    -------
+    motor : k-cube controller
+        k-cube controller which can be used to control a thorlabs motor.
+
+    '''
     DeviceManagerCLI.BuildDeviceList()
     DeviceManagerCLI.GetDeviceListSize()
 
@@ -108,16 +205,18 @@ def InitiateMotor(serialNumber,pollingRate=250):
         try:
             motor.Connect(serialNumber)
         except:
-            print("Connection attempt",attempts,"failed")
-            if(attempts<2):
+            print("Connection attempt", attempts, "failed")
+            if attempts < 2:
                 print("Will wait 5 seconds and try again")
                 sleep(5)
             else:
-                print("Cannot connect to device.\n Please ensure that the device is connected to your computer and not in use in any other program!")
+                print("Cannot connect to device.\n Please ensure that the \
+                      device is connected to your computer and not in use in \
+                          any other program!")
     motor.WaitForSettingsInitialized(5000)
     # configure the stage
     motorSettings = motor.LoadMotorConfiguration(serialNumber)
-    motorSettings.DeviceSettingsName = 'Z812'
+    motorSettings.DeviceSettingsName = DeviceSettingsName
     # update the RealToDeviceUnit converter
     motorSettings.UpdateCurrentConfiguration()
     # push the settings down to the device
@@ -127,38 +226,118 @@ def InitiateMotor(serialNumber,pollingRate=250):
     motor.StartPolling(pollingRate)
 
     motor.EnableDevice()
-    motor.SetJogVelocityParams(Decimal(0.01),Decimal(0.01)) # Jogging parameters set to minimum
+    # Jogging parameters set to minimum
+    motor.SetJogVelocityParams(Decimal(0.01), Decimal(0.01))
     return motor
+
+
 def DisconnectMotor(motor):
+    '''
+    Function for safely disconnecting a motor so that other programs may use
+    it.
+    Parameters
+    ----------
+    motor : Thorlabs motor.
+        Motor to be disconnected.
+
+    Returns
+    -------
+    None.
+
+    '''
     motor.StopPolling()
     motor.Disconnect()
-def MoveMotor(motor,distance):
-    # Jog motor one step along distance
-    if distance>0.1 or distance<-0.1:
+
+
+def MoveMotor(motor, distance):
+    '''
+    Helper function for moving a motor.
+
+    Parameters
+    ----------
+    motor : thorlabs motor
+        Motor to be moved.
+    distance : float
+        Distance to move the motor.
+
+    Returns
+    -------
+    bool
+        True if the move was a success, otherwise false.
+
+    '''
+    if distance > 0.1 or distance < -0.1:
         print("Trying to move too far")
         return False
-    motor.SetJogStepSize(Decimal(float(distance))) # For unknown reason python thinks one first must convert to float but only when running from console...
+    # For unknown reason python thinks one first must convert to float but
+    # only when running from console...
+    motor.SetJogStepSize(Decimal(float(distance))) 
     try:
-        motor.MoveJog(1,timeoutVal)# Jog in forward direction
+        motor.MoveJog(1, timeoutVal)# Jog in forward direction
     except:
         print( "Trying to move motor to NOK position")
         return False
     return True
-def MoveMotorPixels(motor,distance,mmToPixel=16140):
-    # Jog motor one step along distance
-    motor.SetJogStepSize(Decimal(float(distance/mmToPixel))) # For unknown reason python thinks one first must convert to float but only when running from console...
+
+
+def MoveMotorPixels(motor, distance, mmToPixel=16140):
+    '''
+    
+
+    Parameters
+    ----------
+    motor : TYPE
+        DESCRIPTION.
+    distance : TYPE
+        DESCRIPTION.
+    mmToPixel : TYPE, optional
+        DESCRIPTION. The default is 16140.
+
+    Returns
+    -------
+    bool
+        DESCRIPTION.
+
+    '''
+    motor.SetJogStepSize(Decimal(float(distance/mmToPixel)))
     try:
-        motor.MoveJog(1,timeoutVal)# Jog in forward direction
+        motor.MoveJog(1, timeoutVal)  # Jog in forward direction
     except:
         print( "Trying to move motor to NOK position")
         return False
     return True
-def MoveMotorToPixel(motor,targetPixel,currentPixel,maxPixel=1280,mmToPixel=16140): # Double check mm to pixel value empirically measured
+
+
+def MoveMotorToPixel(motor, targetPixel,
+                     currentPixel, maxPixel=1280, mmToPixel=16140):
+    '''
+    
+
+    Parameters
+    ----------
+    motor : TYPE
+        DESCRIPTION.
+    targetPixel : TYPE
+        DESCRIPTION.
+    currentPixel : TYPE
+        DESCRIPTION.
+    maxPixel : TYPE, optional
+        DESCRIPTION. The default is 1280.
+    mmToPixel : TYPE, optional
+        DESCRIPTION. The default is 16140.
+
+    Returns
+    -------
+    bool
+        DESCRIPTION.
+
+    '''
     if(targetPixel<0 or targetPixel>maxPixel): # Fix correct boundries
         print("Target pixel outside of bounds")
         return False
-    dx = -(targetPixel-currentPixel)/mmToPixel # For some reason there should be a minus here, suspec this is due to changes in the setup
-    motor.SetJogStepSize(Decimal(float(dx))) # For unknown reason python thinks one first must convert to float but only when running from console...
+    # There should be a minus here, this is due to the setup
+    dx = -(targetPixel-currentPixel)/mmToPixel 
+    motor.SetJogStepSize(Decimal(float(dx))) 
     try:
         motor.MoveJog(1,timeoutVal)# Jog in forward direction
     except:
@@ -166,15 +345,39 @@ def MoveMotorToPixel(motor,targetPixel,currentPixel,maxPixel=1280,mmToPixel=1614
         return False
     return True
 
-def MoveTrapToPosition(motorX,motorY,targetX,targetY,trapX,trapY):
-    """
-    Moves the trap to target position
-    """
-    x=MoveMotorToPixel(motorX,targetX,trapX) # move X
-    y=MoveMotorToPixel(motorY,targetY,trapY) # move Y
+def MoveTrapToPosition(motorX, motorY, targetX, targetY, trapX, trapY):
+    '''
+    
+
+    Parameters
+    ----------
+    motorX : TYPE
+        DESCRIPTION.
+    motorY : TYPE
+        DESCRIPTION.
+    targetX : TYPE
+        DESCRIPTION.
+    targetY : TYPE
+        DESCRIPTION.
+    trapX : TYPE
+        DESCRIPTION.
+    trapY : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    '''
+    x=MoveMotorToPixel(motorX, targetX, trapX) # move X
+    y=MoveMotorToPixel(motorY, targetY, trapY) # move Y
     return x and y
-def setJogSpeed(motor,jog_speed,jog_acc=0.01):
+
+
+def setJogSpeed(motor, jog_speed, jog_acc=0.01):
     """
     Sets the jog-speed in mm/s of the motor as well as the jog acceleration
     """
-    return motor.SetJogVelocityParams(Decimal(jog_speed),Decimal(jog_acc))
+    return motor.SetJogVelocityParams(Decimal(jog_speed), Decimal(jog_acc))
+
