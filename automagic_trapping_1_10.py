@@ -17,66 +17,76 @@ import PIL.Image, PIL.ImageTk
 
 def get_default_control_parameters(recording_path=None):
     '''
-    Dictionary containing primarily parameters used for specifying the experiment and synchronizing
+    Dictionary containing primarily parameters used for specifying the
+    experiment and synchronizing
     the program threads, such as current trap and motor serial numbers.
-    '''
     # TODO : change this into a class
-    if recording_path == None:
+    '''
+    if recording_path is None:
         now = datetime.datetime.now()
-        recording_path = 'F:/Martin/D'+str(now.year)+'-'+str(now.month)+'-'+str(now.day)
+        recording_path = 'F:/Martin/D' + str(now.year) \
+            + '-' + str(now.month) + '-' + str(now.day)
         try:
             os.mkdir(recording_path)
         except:
             print('Directory already exist')
     control_parameters = {
-    'serial_num_X': '27502438',
-    'serial_num_Y': '27502419',
-    'serial_no_piezo':'97100532',
-    'channel':1,
-    'network_path': 'C:/Martin/Networks/',
-    'recording_path':recording_path,
-    'polling_rate': 100,
-    'continue_capture': True, # True if camera, dispaly, etc should keep updating
-    'motor_running': True, # Should the motor thread keep running?
-    'zoomed_in': False, # Keeps track of whether the image is cropped or not
-    'recording': False, # Default
-    'half_image_width':500, # TODO remove this parameter, should not be needed
-    'AOI':[0,1200,0,1000],
-    'new_AOI_camera': False,
-    'new_AOI_display': False,
-    'new_phasemask':False,
-    'phasemask_updated':False, # True if the phasemask is to be udpated
-    'SLM_iterations': 30,
-    'movement_threshold': 30,
-    'framerate':10,
-    'recording':False,
-    'tracking_on':True,
-    'setpoint_temperature':25,
-    'current_temperature':25,
-    'starting_temperature':25,
-    'search_direction':'right',
-    'particle_centers': [[500],[500]], #[400,400],
-    'target_particle_center':[500,500], # Position of the particle we currently are trying to trap
-    # Used to minimize changes in code when updating to multiparticle tracking
-    'target_trap_pos':[500,500],# Position of the trap we currently are trying to trap in
-    'motor_movements':[0,0], # How much x and y motor should be moved
-    'motor_starting_pos':[0,0], # Startng position of x-y motors, needed for z-compensation
-    'motor_current_pos':[0,0,0], # Current position of x-y motors, needed for z-compensation, z is the last
-    'z_starting_position':0, # Where the experiments starts in z position
-    'z_movement':0, # Target z-movement in "ticks" positive for up, negative for down
-    'z_x_diff':-200, # Used for compensating drift in z when moving the sample. Caused by sample being slightly tilted Needs to be calibrated
-    'z_y_diff':-400,
-    'temperature_z_diff':-190,#-200, # How much the objective need to be moved to compensate for the changes in temperature.Measured in [ticks/deg C]
-    'return_z_home':False,
-    'particle_threshold':120,
-    'particle_size_threshold':200, # Parcticle detection threshold
-    'bright_particle':True, # Is particle brighter than the background?
-    'xy_movement_limit':1200,
-    'motor_locks': [threading.Lock(),threading.Lock()]
+        'serial_num_X': '27502438',
+        'serial_num_Y': '27502419',
+        'serial_no_piezo': '97100532',
+        'channel': 1,
+        'network_path': 'C:/Martin/Networks/',
+        'recording_path': recording_path,
+        'polling_rate': 100,
+        'continue_capture': True,  # True if camera etc should keep updating
+        'motor_running': True,  # Should the motor thread keep running
+        'zoomed_in': False,  # Keeps track of whether the image is cropped or
+        # not
+        'recording': False,  # True if recording is on
+        'half_image_width': 500,  # TODO remove this parameter,
+        'AOI': [0, 1200, 0, 1000],
+        'new_AOI_camera': False,
+        'new_AOI_display': False,
+        'new_phasemask': False,
+        'phasemask_updated': False,  # True if the phasemask is to be udpated
+        'SLM_iterations': 30,
+        'movement_threshold': 30,
+        'framerate': 10,
+        'recording': False,
+        'tracking_on': True,
+        'setpoint_temperature': 25,
+        'current_temperature': 25,
+        'starting_temperature': 25,
+        'search_direction': 'right',
+        'particle_centers': [[500], [500]],
+        'target_particle_center': [500, 500],  # Position of the particle we
+        # currently are trying to trap. Used to minimize changes in code when
+        # updating to multiparticle tracking.
+        'target_trap_pos': [500, 500],
+        'motor_movements': [0, 0],  # How much x and y motor should be moved
+        'motor_starting_pos': [0, 0],  # Startng position of x-y motors,
+        # needed for z-compensation
+        'motor_current_pos': [0, 0, 0],  # Current position of x-y motors,
+        # needed for z-compensation, z is the last
+        'z_starting_position': 0,  # Where the experiments starts in z position
+        'z_movement': 0,  # Target z-movement in "ticks" positive for up,
+        # negative for down
+        'z_x_diff': -200,  # Used for compensating drift in z when moving the
+        # sample. Caused by sample being slightly tilted Needs to be calibrated
+        'z_y_diff': -400,
+        'temperature_z_diff': -190,  # How much the objective need to be moved
+        # to compensate for the changes in temperature.Measured in
+        # [ticks/deg C]
+        'return_z_home': False,
+        'particle_threshold': 120,
+        'particle_size_threshold': 200,  # Parcticle detection threshold
+        'bright_particle': True,  # Is particle brighter than the background?
+        'xy_movement_limit': 1200,
+        'motor_locks': [threading.Lock(), threading.Lock()]
     }
 
     # Set traps positions
-    control_parameters['traps_absolute_pos'] = np.zeros((2,1)) # This will need updating
+    control_parameters['traps_absolute_pos'] = np.zeros((2,1))
     control_parameters['traps_relative_pos'] = np.zeros((2,1))
 
     # Position of first trap
@@ -84,30 +94,31 @@ def get_default_control_parameters(recording_path=None):
     control_parameters['traps_absolute_pos'][1][0] = 465
     control_parameters['traps_relative_pos'][0][0] = 678
     control_parameters['traps_relative_pos'][1][0] = 465
-    '''
-    for i in range(16):
-        control_parameters['traps_absolute_pos'][0][i] = 459+154*(i%4)#x
-        control_parameters['traps_absolute_pos'][1][i] = 311+154*(i//4)#y
-        control_parameters['traps_relative_pos'][0][i] = 459+154*(i%4)#x
-        control_parameters['traps_relative_pos'][1][i] = 311+154*(i//4)#y
-    '''
+
     control_parameters['traps_occupied'] = [False for i in range(len(control_parameters['traps_absolute_pos'][0]))]
-    control_parameters['phasemask'] = np.zeros((1080,1080)) # phasemask of
+    control_parameters['phasemask'] = np.zeros((1080, 1080))  # phasemask  size
     return control_parameters
+
+
 def terminate_threads():
     '''
-    Function for killing all the threads
+    Function for terminating all threads.
+
+    Returns
+    -------
+    None.
+
     '''
-    control_parameters['continue_capture'] = False # All threds exits their main loop once this parameter is changed
+    control_parameters['continue_capture'] = False
     control_parameters['motor_running'] = False
-    #messagebox.showinfo('Terminating threads')
-    #print('Terminating threads \n')
     time.sleep(1)
     global thread_list
     for thread in thread_list:
         thread.join()
     for thread in thread_list:
         del thread
+
+
 def start_threads():
     """
     Function for starting all the threads, can only be called once
@@ -115,12 +126,16 @@ def start_threads():
     global thread_list
     # global temperature_controller
     camera_thread = CameraThread(1, 'Thread-camera')
-    motor_X_thread = MotorThread(2,'Thread-motorX',0) # Last argument is to indicate that it is the x-motor and not the y
-    motor_Y_thread = MotorThread(3,'Thread-motorY',1)
-    slm_thread =CreateSLMThread(4,'Thread-SLM')
-    tracking_thread = TrackingThread(5,'Tracker_thread')
-    temperature_thread = TemperatureThread(6,'Temperature_thread')
-    z_thread = z_movement_thread(6, 'z-thread',serial_no=control_parameters['serial_no_piezo'],channel=control_parameters['channel'])
+    motor_X_thread = MotorThread(2, 'Thread-motorX',0)
+    # Last argument is to indicate that it is the x-motor and not the y
+    motor_Y_thread = MotorThread(3, 'Thread-motorY',1)
+    slm_thread =CreateSLMThread(4, 'Thread-SLM')
+    tracking_thread = TrackingThread(5, 'Tracker_thread')
+    temperature_thread = TemperatureThread(6, 'Temperature_thread')
+    z_thread = z_movement_thread(6,
+                                 'z-thread',
+                                 serial_no=control_parameters['serial_no_piezo'],
+                                 channel=control_parameters['channel'])
 
     camera_thread.start()
     motor_X_thread.start()
@@ -137,59 +152,79 @@ def start_threads():
     thread_list.append(tracking_thread)
     thread_list.append(slm_thread)
     thread_list.append(z_thread)
-def create_buttons(top):
-    def get_y_separation(start=50,distance=40):
+def create_buttons(self,top):
+    def get_y_separation(start=50, distance=40):
+        # Simple generator to avoid printing all the y-positions of the
+        # buttons
+
         index = 0
         while True:
             yield start + (distance * index)
             index += 1
+
     global control_parameters
-    exit_button = tkinter.Button(top, text ='Exit program', command = terminate_threads)
-    up_button = tkinter.Button(top, text ='Move up', command = partial(move_button,0))
-    down_button = tkinter.Button(top, text ='Move down', command = partial(move_button,1))
-    right_button = tkinter.Button(top, text ='Move right', command = partial(move_button,2))
-    left_button = tkinter.Button(top, text ='Move left', command = partial(move_button,3))
-    start_record_button = tkinter.Button(top, text ='Start recording', command = start_record)
-    stop_record_button = tkinter.Button(top, text ='Stop recording', command = stop_record)
-    toggle_bright_particle_button = tkinter.Button(top, text ='Toggle particle brightness', command = toggle_bright_particle)
-    threshold_entry = tkinter.Entry(top, bd =5)
-    temperature_entry = tkinter.Entry(top, bd =5)
-    toggle_tracking_button = tkinter.Button(top, text ='Toggle particle tracking', command = toggle_tracking)
+
+    exit_button = tkinter.Button(top, text='Exit program',
+                                 command=terminate_threads)
+    up_button = tkinter.Button(top, text='Move up',
+                               command=partial(move_button, 0))
+    down_button = tkinter.Button(top, text='Move down',
+                                 command=partial(move_button, 1))
+    right_button = tkinter.Button(top, text='Move right',
+                                  command=partial(move_button, 2))
+    left_button = tkinter.Button(top, text='Move left',
+                                 command=partial(move_button, 3))
+    start_record_button = tkinter.Button(top, text='Start recording',
+                                         command=start_record)
+    stop_record_button = tkinter.Button(top, text='Stop recording',
+                                        command=stop_record)
+    toggle_bright_particle_button = tkinter.Button(
+        top, text='Toggle particle brightness',
+        command=toggle_bright_particle)
+
+    threshold_entry = tkinter.Entry(top, bd=5)
+    temperature_entry = tkinter.Entry(top, bd=5)
+    toggle_tracking_button = tkinter.Button(
+        top, text='Toggle particle tracking', command=toggle_tracking)
+
     def set_threshold():
         entry = threshold_entry.get()
         try:
             threshold = int(entry)
-            if 0<threshold<255:
+            if 0 < threshold < 255:
                 control_parameters['particle_threshold'] = threshold
-                print("Threshold set to ",threshold)
+                print("Threshold set to ", threshold)
             else:
                 print('Threshold out of bounds')
         except:
             print('Cannot convert entry to integer')
-        threshold_entry.delete(0,last=5000)
+        threshold_entry.delete(0, last=5000)
+
     def set_temperature():
         entry = temperature_entry.get()
         try:
             temperature = float(entry)
-            if 20<temperature<40:
+            if 20 < temperature < 40:
                 control_parameters['setpoint_temperature'] = temperature
-                print("Temperature set to ",temperature)
+                print("Temperature set to ", temperature)
             else:
-                print('Temperature out of bounds, it is no good to cook or freeze your samples')
+                print('Temperature out of bounds, it is no good to cook or \
+                      freeze your samples')
         except:
             print('Cannot convert entry to integer')
-        temperature_entry.delete(0,last=5000)
+        temperature_entry.delete(0, last=5000)
 
-    threshold_button = tkinter.Button(top, text ='Set threshold', command = set_threshold)
-    focus_up_button = tkinter.Button(top, text ='Move focus up', command = focus_up)
-    focus_down_button = tkinter.Button(top, text ='Move focus down', command = focus_down)
-    temperature_button = tkinter.Button(top, text ='Set setpoint temperature', command = set_temperature)
-    zoom_in_button = tkinter.Button(top, text ='Zoom in', command = zoom_in)
-    zoom_out_button = tkinter.Button(top, text ='Zoom out', command = zoom_out)
+    threshold_button = tkinter.Button(
+        top, text='Set threshold', command=set_threshold)
+    focus_up_button = tkinter.Button(
+        top, text='Move focus up', command=focus_up)
+    focus_down_button = tkinter.Button(
+        top, text='Move focus down', command=focus_down)
+    temperature_button = tkinter.Button(
+        top, text='Set setpoint temperature', command=set_temperature)
+    zoom_in_button = tkinter.Button(top, text='Zoom in', command=zoom_in)
+    zoom_out_button = tkinter.Button(top, text='Zoom out', command=zoom_out)
 
-    # zoom_button = tkniter.Button(top,text='toggle zoom',command = toggle_zoom)
-    # Idea - Use radiobutton for the toggle
-    # TODO add button or similar for zoom in
     x_position = 1220
     y_position = get_y_separation()
     exit_button.place(x=x_position, y=y_position.__next__())
@@ -198,46 +233,68 @@ def create_buttons(top):
     right_button.place(x=x_position, y=y_position.__next__())
     left_button.place(x=x_position, y=y_position.__next__())
     start_record_button.place(x=x_position, y=y_position.__next__())
-    stop_record_button.place(x=x_position,y=y_position.__next__())
+    stop_record_button.place(x=x_position, y=y_position.__next__())
     toggle_bright_particle_button.place(x=x_position, y=y_position.__next__())
-    threshold_entry.place(x=x_position,y=y_position.__next__())
-    threshold_button.place(x=x_position,y=y_position.__next__())
-    toggle_tracking_button.place(x=x_position,y=y_position.__next__())
-    focus_up_button.place(x=x_position,y=y_position.__next__())
-    focus_down_button.place(x=x_position,y=y_position.__next__())
-    temperature_entry.place(x=x_position,y=y_position.__next__())
-    temperature_button.place(x=x_position,y=y_position.__next__())
-    zoom_in_button.place(x=x_position,y=y_position.__next__())
-    zoom_out_button.place(x=x_position,y=y_position.__next__())
+    threshold_entry.place(x=x_position, y=y_position.__next__())
+    threshold_button.place(x=x_position, y=y_position.__next__())
+    toggle_tracking_button.place(x=x_position, y=y_position.__next__())
+    focus_up_button.place(x=x_position, y=y_position.__next__())
+    focus_down_button.place(x=x_position, y=y_position.__next__())
+    temperature_entry.place(x=x_position, y=y_position.__next__())
+    temperature_button.place(x=x_position, y=y_position.__next__())
+    zoom_in_button.place(x=x_position, y=y_position.__next__())
+    zoom_out_button.place(x=x_position, y=y_position.__next__())
+
 
 class CreateSLMThread(threading.Thread):
-    def __init__(self,threadID,name):
+    def __init__(self, threadID, name):
+        '''
+        Parameters
+        ----------
+        threadID : int
+            Thred number.
+        name : string
+            Name of thread.
+
+        Returns
+        -------
+        None.
+
+        '''
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
         self.setDaemon(True)
+
     def run(self):
         global control_parameters
-        nbr_active_traps = 3#1
+        nbr_active_traps = 2
         max_nbr_traps = 9
-        traps_positions = np.zeros((2,max_nbr_traps))
 
-        xm,ym = SLM.get_default_xm_ym()
-        print('xm=',xm,'\n ym=',ym)
-        screen_x = [578,727,877,578,727,877,578,727,877]
-        screen_y = [465,465,465,615,615,615,765,765,765]
-        Delta,N,M = SLM.get_delta(xm=xm[:nbr_active_traps],ym=ym[:nbr_active_traps] )
-        control_parameters['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=control_parameters['SLM_iterations'])
+        xm, ym = SLM.get_default_xm_ym()
+        print('xm=', xm, '\n ym=', ym)
+        screen_x = [578, 727, 877, 578, 727, 877, 578, 727, 877]
+        screen_y = [465, 465, 465, 615, 615, 615, 765, 765, 765]
+        Delta, N, M = SLM.get_delta(xm=xm[:nbr_active_traps],
+                                    ym=ym[:nbr_active_traps])
+        control_parameters['phasemask'] = SLM.GSW(
+            N, M, Delta, nbr_iterations=control_parameters['SLM_iterations'])
+        control_parameters['traps_absolute_pos'] =\
+            np.zeros((2, nbr_active_traps))
+        control_parameters['traps_relative_pos'] =\
+            np.zeros((2, nbr_active_traps))
 
-        control_parameters['traps_absolute_pos'] = np.zeros((2,nbr_active_traps))
-        control_parameters['traps_relative_pos'] = np.zeros((2,nbr_active_traps))
+        control_parameters['traps_absolute_pos'][0] =\
+            screen_x[:nbr_active_traps]
+        control_parameters['traps_absolute_pos'][1] =\
+            screen_y[:nbr_active_traps]
+        control_parameters['traps_relative_pos'][0] =\
+        [x - control_parameters['AOI'][0] for x in screen_x[:nbr_active_traps]]
+        control_parameters['traps_relative_pos'][1] =\
+        [y - control_parameters['AOI'][2] for y in screen_y[:nbr_active_traps]]
 
-        control_parameters['traps_absolute_pos'][0] = screen_x[:nbr_active_traps]
-        control_parameters['traps_absolute_pos'][1] = screen_y[:nbr_active_traps]
-        control_parameters['traps_relative_pos'][0] = [x - control_parameters['AOI'][0] for x in screen_x[:nbr_active_traps]]
-        control_parameters['traps_relative_pos'][1] = [y - control_parameters['AOI'][2] for y in screen_y[:nbr_active_traps]]
-
-        control_parameters['traps_occupied'] = [False for i in range(len(control_parameters['traps_absolute_pos'][0]))]
+        control_parameters['traps_occupied'] =\
+            [False for i in range(len(control_parameters['traps_absolute_pos'][0]))]
 
         while control_parameters['continue_capture']:
             if control_parameters['new_phasemask']:
@@ -246,20 +303,30 @@ class CreateSLMThread(threading.Thread):
 
                 if nbr_active_traps<max_nbr_traps+1:
                     # Calcualte new delta and phasemask
-                    Delta,N,M = SLM.get_delta(xm=xm[:nbr_active_traps],ym=ym[:nbr_active_traps] )
-                    control_parameters['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=control_parameters['SLM_iterations'])
+                    Delta,N,M = SLM.get_delta(
+                        xm=xm[:nbr_active_traps], ym=ym[:nbr_active_traps])
+                    control_parameters['phasemask'] = SLM.GSW(
+                        N, M, Delta,
+                        nbr_iterations=control_parameters['SLM_iterations'])
                     control_parameters['phasemask_updated'] = True
                     control_parameters['new_phasemask'] = False
                     # Update the number of traps and their position
-                    control_parameters['traps_absolute_pos'] = np.zeros((2,nbr_active_traps))
-                    control_parameters['traps_relative_pos'] = np.zeros((2,nbr_active_traps))
+                    control_parameters['traps_absolute_pos'] =\
+                        np.zeros((2,nbr_active_traps))
+                    control_parameters['traps_relative_pos'] =\
+                        np.zeros((2,nbr_active_traps))
 
-                    control_parameters['traps_absolute_pos'][0] = screen_x[:nbr_active_traps]
-                    control_parameters['traps_absolute_pos'][1] = screen_y[:nbr_active_traps]
-                    control_parameters['traps_relative_pos'][0] = [x - control_parameters['AOI'][0] for x in screen_x[:nbr_active_traps]]
-                    control_parameters['traps_relative_pos'][1] = [y - control_parameters['AOI'][2] for y in screen_y[:nbr_active_traps]]
+                    control_parameters['traps_absolute_pos'][0] =\
+                        screen_x[:nbr_active_traps]
+                    control_parameters['traps_absolute_pos'][1] =\
+                        screen_y[:nbr_active_traps]
+                    control_parameters['traps_relative_pos'][0] =\
+                        [x - control_parameters['AOI'][0] for x in screen_x[:nbr_active_traps]]
+                    control_parameters['traps_relative_pos'][1] =\
+                        [y - control_parameters['AOI'][2] for y in screen_y[:nbr_active_traps]]
 
-                    control_parameters['traps_occupied'] = [False for i in range(len(control_parameters['traps_absolute_pos'][0]))]
+                    control_parameters['traps_occupied'] =\
+                        [False for i in range(len(control_parameters['traps_absolute_pos'][0]))]
 
                 else:
                     # All traps already in position, no need to calculate phasemask
@@ -271,26 +338,51 @@ class TemperatureThread(threading.Thread):
         '''
         Class for running the temperature controller in the background
         '''
-        def __init__(self, threadID, name,temperature_controller=None,max_diff=0.01):
+        def __init__(self, threadID, name, temperature_controller=None, max_diff=0.01):
+            '''
+
+
+            Parameters
+            ----------
+            threadID : int
+                Thread id number.
+            name : String
+                Name of thread.
+            temperature_controller : temperaturecontroller, optional
+                Controller of objective temperature. The default is None.
+            max_diff : Float, optional
+                 Maximum value by which temperature is allowed to deviate from
+                 target temperature for temperature to be considered as stable.
+                 The default is 0.01.
+
+            Returns
+            -------
+            None.
+
+            '''
             threading.Thread.__init__(self)
             self.threadID = threadID
             self.name = name
             self.temperature_history = []
             self.temp_hist_length = 100
-            self.max_diff = max_diff # Maximum value by which temperature is allowed to deviate from target temperature
-            # for temperature to be considered as stable.
+            self.max_diff = max_diff
             if temperature_controller is not None:
                 self.temperature_controller = temperature_controller
             else:
                 try:
-                    self.temperature_controller = TemperatureControllerTED4015.TED4015_controller()
-                    control_parameters['starting_temperature'] = self.temperature_controller.measure_temperature()
-                    control_parameters['current_temperature'] = control_parameters['starting_temperature']
+                    self.temperature_controller =\
+                        TemperatureControllerTED4015.TED4015_controller()
+                    control_parameters['starting_temperature'] =\
+                        self.temperature_controller.measure_temperature()
+                    control_parameters['current_temperature'] =\
+                        control_parameters['starting_temperature']
                 except:
-                    # Handling the case of not being having a temperature controller
-                    print('\nWARNING, COULD NOT ESTABLISH CONTACT WITH TEMEPERATURE CONTROLLER!\n')
+                    # Handling the case of not having a temperature controller
+                    print('\nWARNING, COULD NOT ESTABLISH CONTACT WITH \
+                          TEMEPERATURE CONTROLLER!\n')
                     self.temperature_controller = None
             self.setDaemon(True)
+
         def run(self):
             global control_parameters
             if self.temperature_controller is not None:
@@ -298,45 +390,55 @@ class TemperatureThread(threading.Thread):
                 self.temperature_controller.turn_on_output()
                 while control_parameters['continue_capture']:
                     self.temperature_controller.set_setpoint_temperature(control_parameters['setpoint_temperature'])
-                    control_parameters['current_temperature'] = self.temperature_controller.measure_temperature()
-                    self.temperature_history.append(control_parameters['current_temperature'])
+                    control_parameters['current_temperature'] =\
+                        self.temperature_controller.measure_temperature()
+                    self.temperature_history.append(
+                        control_parameters['current_temperature'])
 
                     if len(self.temperature_history)>self.temp_hist_length:
                         self.temperature_history.pop()
 
-                    if max(np.abs(self.temperature_history-control_parameters['set_temperature']))<self.max_diff:
+                    if max(np.abs(self.temperature_history -
+                        control_parameters['set_temperature']))< self.max_diff:
+
                         control_parameters['temperature_stable'] = True
+
                     else:
                         control_parameters['temperature_stable'] = False
 
                     time.sleep(1) # We do not need to update the temperature very often
                 self.temperature_controller.turn_off_output()
+
+
 class TkinterDisplay:
 
     def __init__(self, window, window_title,):
-         self.window = window
-         self.window.title(window_title)
+        self.window = window
+        self.window.title(window_title)
 
-         # Create a canvas that can fit the above video source size
-         self.canvas_width = 1200
-         self.canvas_height = 1000
-         self.canvas = tkinter.Canvas(window, width = self.canvas_width, height = self.canvas_height)
-         self.canvas.place(x=0, y=0)
+        # Create a canvas that can fit the above video source size
+        self.canvas_width = 1200
+        self.canvas_height = 1000
+        self.canvas = tkinter.Canvas(
+            window, width=self.canvas_width, height=self.canvas_height)
+        self.canvas.place(x=0, y=0)
 
-         # Button that lets the user take a snapshot
-         self.btn_snapshot=tkinter.Button(window, text="Snapshot", command=self.snapshot)
-         self.btn_snapshot.place(x=1300, y=0)
-         create_buttons(self.window)
-         self.window.geometry('1500x1000')
-         # After it is called once, the update method will be automatically called every delay milliseconds
-         self.delay = 50
+        # Button that lets the user take a snapshot
+        self.btn_snapshot = tkinter.Button(
+            window, text="Snapshot", command=self.snapshot)
+        self.btn_snapshot.place(x=1300, y=0)
+        self.create_buttons(self.window)
+        self.window.geometry('1500x1000')
+        # After it is called once, the update method will be automatically
+        # called every delay milliseconds
+        self.delay = 50
 
-         self.create_SLM_window(SLM_window)
-         self.create_indicators()
-         self.update()
-         start_threads()
+        self.create_SLM_window(SLM_window)
+        self.create_indicators()
+        self.update()
+        start_threads()
 
-         self.window.mainloop()
+        self.window.mainloop()
     def create_SLM_window(self, _class):
         try:
             if self.new.state() == "normal":
@@ -344,34 +446,48 @@ class TkinterDisplay:
         except:
             self.new = tkinter.Toplevel(self.window)
             self.SLM_Window = _class(self.new)
+
     def snapshot(self):
          global image
          global control_parameters
-         cv2.imwrite(control_parameters['recording_path']+"/frame-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+         cv2.imwrite(control_parameters['recording_path'] + "/frame-" +\
+                     time.strftime("%d-%m-%Y-%H-%M-%S") +\
+                     ".jpg", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+
     def create_indicators(self):
-            global control_parameters
-            # Update if recording is turned on or not
-            # TODO replace this with an information box
-            if control_parameters['recording']:
-             self.recording_label = Label(self.window,text='recording is on',bg='green')
-            else:
-             self.recording_label = Label(self.window,text='recording is off',bg='red')
-            self.recording_label.place(x=1220,y=900)
+        global control_parameters
+        # Update if recording is turned on or not
+        # TODO replace this with an information box
+        if control_parameters['recording']:
+            self.recording_label = Label(
+                self.window, text='recording is on', bg='green')
+        else:
+            self.recording_label = Label(
+                self.window, text='recording is off', bg='red')
+        self.recording_label.place(x=1220, y=900)
 
-            if control_parameters['tracking_on']:
-             self.tracking_label = Label(self.window,text='particle tracking is on',bg='green')
-            else:
-             self.tracking_label = Label(self.window,text='particle tracking is off',bg='red')
-            self.tracking_label.place(x=1220,y=930)
+        if control_parameters['tracking_on']:
+             self.tracking_label = Label(
+                 self.window, text='particle tracking is on', bg='green')
+        else:
+            self.tracking_label = Label(
+                self.window, text='particle tracking is off', bg='red')
+        self.tracking_label.place(x=1220, y=930)
 
-            position_text = 'x: '+str(control_parameters['motor_current_pos'][0])+' y: '+str(control_parameters['motor_current_pos'][1])+'z: '+str(control_parameters['motor_current_pos'][2])
-            #position_text += 'z: '+str(control_parameters['motor_current_pos'][2])
-            self.position_label = Label(self.window,text=position_text)
-            self.position_label.place(x=1220,y=800)
+        position_text = 'x: ' +\
+            str(control_parameters['motor_current_pos'][0]) + ' y: ' \
+                + str(control_parameters['motor_current_pos'][1]) + 'z: '\
+                + str(control_parameters['motor_current_pos'][2])
 
-            temperature_text = 'Current objective temperature is: '+str(control_parameters['current_temperature'])+' C'+'\n setpoint temperature is: '+str(control_parameters['setpoint_temperature'])+' C'
-            self.temperature_label = Label(self.window,text=temperature_text)
-            self.temperature_label.place(x=1220,y=840)
+        self.position_label = Label(self.window, text=position_text)
+        self.position_label.place(x=1220, y=800)
+
+        temperature_text = 'Current objective temperature is: '+\
+            str(control_parameters['current_temperature']) + ' C' +\
+                '\n setpoint temperature is: ' +\
+                str(control_parameters['setpoint_temperature']) + ' C'
+        self.temperature_label = Label(self.window, text=temperature_text)
+        self.temperature_label.place(x=1220, y=840)
     def update_indicators(self):
         '''
         Helper function for updating on-screen indicators
@@ -380,30 +496,30 @@ class TkinterDisplay:
         # Update if recording is turned on or not
         # TODO replace this with an information box
         if control_parameters['recording']:
-            self.recording_label.config(text='recording is on',bg='green')
+            self.recording_label.config(text='recording is on', bg='green')
         else:
-            self.recording_label.config(text='recording is off',bg='red')
+            self.recording_label.config(text='recording is off', bg='red')
 
         if control_parameters['tracking_on']:
             self.tracking_label.config(text='particle tracking is on',bg='green')
         else:
-            self.tracking_label.config(text='particle tracking is off',bg='red')
+            self.tracking_label.config(text='particle tracking is off', bg='red')
         temperature_text = 'Current objective temperature is: '+str(control_parameters['current_temperature'])+' C'+'\n setpoint temperature is: '+str(control_parameters['setpoint_temperature'])+' C'
         self.temperature_label.config(text=temperature_text)
         position_text = 'x: '+str(control_parameters['motor_current_pos'][0])+\
             ' y: '+str(control_parameters['motor_current_pos'][1])+\
             ' z: '+str(control_parameters['motor_current_pos'][2])
         self.position_label.config(text=position_text)
-    def resize_display_image(self,img):
+    def resize_display_image(self, img):
         img_size = np.shape(img)
         #print(img_size)
         if img_size[1]==self.canvas_width or img_size[0] == self.canvas_height:
             return img
 
         if img_size[1]/self.canvas_width > img_size[0]/self.canvas_height:
-            dim = (int(self.canvas_width/img_size[1]*img_size[0]),int(self.canvas_width))
+            dim = (int(self.canvas_width/img_size[1]*img_size[0]), int(self.canvas_width))
         else:
-            dim = ( int(self.canvas_height),int(self.canvas_height/img_size[0]*img_size[1]))
+            dim = ( int(self.canvas_height), int(self.canvas_height/img_size[0]*img_size[1]))
         return cv2.resize(img, (dim[1],dim[0]), interpolation = cv2.INTER_AREA)
     def update(self):
          # Get a frame from the video source
@@ -437,60 +553,16 @@ class SLM_window(Frame):
         # This implementation does work but is perhaps a tiny bit janky
         self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(control_parameters['phasemask']))
         del self.img.image
-        self.img = Label(self,image=self.photo)
+        self.img = Label(self, image=self.photo)
         self.img.image = self.photo # This ate lots of memory
         self.img.place(x=420, y=0) # Do not think this is needed
-class DisplayThread(threading.Thread):
-    '''
-    Thread class for plotting the result in the BG.
-    InitiateMotorreally appreciated by python
-    '''
-    def __init__(self, threadID, name):
-        threading.Thread.__init__(self)
-        self.threadID = threadID
-        self.name = name
-        self.setDaemon(True)
 
-    def run(self):
-        global control_parameters
-        while control_parameters['continue_capture']:
 
-            # Initiate interactive pyplot display
-            ax = plt.axes() #axis([xmin, xmax, ymin, ymax])
-            im = ax.imshow(image) # Image is global
-            plt.ion()
-
-            # Acknowledge that the display has been created
-            control_parameters['new_AOI_display'] = False # AOI has been acknowledged
-
-            # Start measuring the FPS
-            start =  time.time() # For calculating framerate
-            frame_counter = 0
-            while control_parameters['continue_capture'] and not control_parameters['new_AOI_display']:
-
-               im.set_data(image) #
-               if not np.isnan(control_parameters['target_particle_center'][0]):
-                   plt.cla()
-                   im = ax.imshow(image,cmap='gray',vmin=0, vmax=255) # Repainting to prevent old center position from staying on screen
-                   if control_parameters['target_particle_center'][0]<(control_parameters['AOI'][1]-control_parameters['AOI'][0]) and control_parameters['target_particle_center'][1]<(control_parameters['AOI'][3]-control_parameters['AOI'][2]) : # Accidentally doing stuff wrong here
-
-                       plt.plot(control_parameters['particle_centers'][0],control_parameters['particle_centers'][1],'x',color='r')
-               if control_parameters['recording']:
-                   plt.title('Recording ON')
-               else:
-                   plt.title('Recording OFF')
-               plt.pause(0.0001)
-               frame_counter +=1
-            # CLose down the livedisplay and print FPS
-            end = time.time()
-            print('Fps for livefeed is ',frame_counter/(end-start))
-            plt.ioff()
-            plt.close()
 class MotorThread(threading.Thread):
     '''
     Thread in which a motor is controlled. The motor object is available globally.
     '''
-    def __init__(self, threadID, name,axis):
+    def __init__(self, threadID, name, axis):
 
       threading.Thread.__init__(self)
       global control_parameters
@@ -498,13 +570,15 @@ class MotorThread(threading.Thread):
       self.name = name
       self.axis = axis # 0 = x-axis, 1 = y axis
       if self.axis==0:
-          self.motor = TM.InitiateMotor(control_parameters['serial_num_X'],pollingRate=control_parameters['polling_rate'])
+          self.motor = TM.InitiateMotor(control_parameters['serial_num_X'],
+            pollingRate=control_parameters['polling_rate'])
       elif self.axis==1:
-          self.motor = TM.InitiateMotor(control_parameters['serial_num_Y'],pollingRate=control_parameters['polling_rate'])
+          self.motor = TM.InitiateMotor(control_parameters['serial_num_Y'],
+            pollingRate=control_parameters['polling_rate'])
       else:
           print('Invalid choice of axis, no motor available')
       control_parameters['motor_starting_pos'][self.axis] = float(str(self.motor.Position))
-      print('Motor is at ',control_parameters['motor_starting_pos'][self.axis])
+      print('Motor is at ', control_parameters['motor_starting_pos'][self.axis])
       self.setDaemon(True)
     def run(self):
        print('Running motor thread')
@@ -519,12 +593,12 @@ class MotorThread(threading.Thread):
                     # Check how much the motor is allowed to move
 
                     if np.abs(control_parameters['motor_movements'][self.axis])<=control_parameters['xy_movement_limit']:
-                        TM.MoveMotorPixels(self.motor,control_parameters['motor_movements'][self.axis])
+                        TM.MoveMotorPixels(self.motor, control_parameters['motor_movements'][self.axis])
                     else:
                         if control_parameters['motor_movements'][self.axis]>0:
-                            TM.MoveMotorPixels(self.motor,control_parameters['xy_movement_limit'])
+                            TM.MoveMotorPixels(self.motor, control_parameters['xy_movement_limit'])
                         else:
-                            TM.MoveMotorPixels(self.motor,-control_parameters['xy_movement_limit'])
+                            TM.MoveMotorPixels(self.motor, -control_parameters['xy_movement_limit'])
                     control_parameters['motor_movements'][self.axis] = 0
             control_parameters['motor_current_pos'][self.axis] = float(str(self.motor.Position))
             control_parameters['motor_locks'][self.axis].release()
@@ -536,12 +610,12 @@ class z_movement_thread(threading.Thread):
     Thread for controling movement of the objective in z-directio.
     Will also help with automagically adjusting the focus to the sample.
     '''
-    def __init__(self, threadID, name,serial_no,channel,polling_rate=250):
+    def __init__(self, threadID, name, serial_no, channel, polling_rate=250):
         threading.Thread.__init__(self)
         global control_parameters
         self.threadID = threadID
         self.name = name
-        self.piezo = TM.PiezoMotor(serial_no,channel=channel,pollingRate=polling_rate)
+        self.piezo = TM.PiezoMotor(serial_no, channel=channel, pollingRate=polling_rate)
         control_parameters['z_starting_position'] = self.piezo.get_position()
         self.setDaemon(True)
     def compensate_focus(self):
@@ -593,9 +667,12 @@ class CameraThread(threading.Thread):
         fourcc = VideoWriter_fourcc(*'MJPG')
         image_width = control_parameters['AOI'][1]-control_parameters['AOI'][0]
         image_height = control_parameters['AOI'][3]-control_parameters['AOI'][2]
-        video_name = control_parameters['recording_path']+'/moive-'+str(now.hour)+'-'+str(now.minute)+'-'+str(now.second)+'.avi'
-        video = VideoWriter(video_name, fourcc, float(control_parameters['framerate']), (image_width, image_height),isColor=False)
-        return video,video_name
+        video_name = control_parameters['recording_path'] + '/moive-' + \
+            str(now.hour) + '-' + str(now.minute) + '-' + str(now.second)+'.avi'
+        video = VideoWriter(video_name, fourcc,
+            float(control_parameters['framerate']),
+            (image_width, image_height), isColor=False)
+        return video, video_name
    def run(self):
 
        print('Initiating threaded capture sequence')
@@ -608,7 +685,10 @@ class CameraThread(threading.Thread):
        global cam
        while control_parameters['continue_capture']:
            # Set defaults for camera, aknowledge that this has been done
-           cam.set_defaults(left=control_parameters['AOI'][0],right=control_parameters['AOI'][1],top=control_parameters['AOI'][2],bot=control_parameters['AOI'][3])
+           cam.set_defaults(left=control_parameters['AOI'][0],
+               right=control_parameters['AOI'][1],
+               top=control_parameters['AOI'][2],
+               bot=control_parameters['AOI'][3])
            control_parameters['new_AOI_camera'] = False
 
            # Grab one example image
@@ -617,7 +697,9 @@ class CameraThread(threading.Thread):
            image_count = 0
            # Start livefeed from the camera
 
-           cam.start_live_video(framerate=str(control_parameters['framerate'])+'hertz' ) # Maximum framerate, shoul probably cap it
+           # Setting  maximum framerate. Will cap it to make it stable
+           cam.start_live_video(
+                framerate=str(control_parameters['framerate']) + 'hertz' )
 
            start = time.time()
 
@@ -626,7 +708,8 @@ class CameraThread(threading.Thread):
                video,video_name = self.create_video_writer()
                video_created = True
            # Start continously capturin images now that the camera parameters have been set
-           while control_parameters['continue_capture'] and not control_parameters['new_AOI_camera']:
+           while control_parameters['continue_capture']\
+                and not control_parameters['new_AOI_camera']:
                cam.wait_for_frame(timeout=None)
                if control_parameters['recording']:
                    video.write(image) # TODO, ensure this is done in the background
@@ -642,7 +725,11 @@ class CameraThread(threading.Thread):
            # Close the livefeed and calculate the fps of the captures
            end = time.time()
            cam.stop_live_video()
-           print('Capture sequence finished',image_count, 'Images captured in ',end-start,'seconds. \n FPS is ',image_count/(end-start))
+           print('Capture sequence finished', image_count,
+                'Images captured in ', end-start, 'seconds. \n FPS is ',
+                image_count/(end-start))
+
+
 class TrackingThread(threading.Thread):
    '''
    Thread which does the tracking
