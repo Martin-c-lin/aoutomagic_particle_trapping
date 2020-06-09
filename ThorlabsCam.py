@@ -36,6 +36,12 @@ def find_closest(centers, target):
     return index, distance
 
 
+def set_exposure(cam,exposure_time):
+    exposure_time = float(exposure_time+1e-4)
+    print(number_to_millisecond(exposure_time))
+    cam.set_defaults(exposure_time=number_to_millisecond(exposure_time))
+
+
 def find_exposure_time(cam,targetIntensity=100,margin=5):
     """
     Function which automatically sets an exposire time such that the
@@ -46,7 +52,7 @@ def find_exposure_time(cam,targetIntensity=100,margin=5):
     cam : Camera object
         DESCRIPTION.
     targetIntensity : float, optional
-        DESCRIPTION. Taget average ingtensity of images aquired. 
+        DESCRIPTION. Taget average ingtensity of images aquired.
         The default is 100.
     margin : Float, optional
         DESCRIPTION. Allowed deviation from average The default is 5.
