@@ -75,6 +75,10 @@ def get_default_c_p(recording_path=None):
         # sample. Caused by sample being slightly tilted Needs to be calibrated
         'z_y_diff': -400,
         'temperature_z_diff': -190,  # How much the objective need to be moved
+
+        'slm_x_center':1274, # needs to be recalibrated if camera is moved
+        'slm_y_center':1136,
+        'slm_to_pixel': 4550000.0,
         # to compensate for the changes in temperature.Measured in
         # [ticks/deg C]
         'return_z_home': False,
@@ -154,100 +158,6 @@ def start_threads():
     thread_list.append(z_thread)
 
 
-def create_buttons(self,top):
-    def get_y_separation(start=50, distance=40):
-        # Simple generator to avoid printing all the y-positions of the
-        # buttons
-
-        index = 0
-        while True:
-            yield start + (distance * index)
-            index += 1
-
-    global c_p
-
-    exit_button = tkinter.Button(top, text='Exit program',
-                                 command=terminate_threads)
-    up_button = tkinter.Button(top, text='Move up',
-                               command=partial(move_button, 0))
-    down_button = tkinter.Button(top, text='Move down',
-                                 command=partial(move_button, 1))
-    right_button = tkinter.Button(top, text='Move right',
-                                  command=partial(move_button, 2))
-    left_button = tkinter.Button(top, text='Move left',
-                                 command=partial(move_button, 3))
-    start_record_button = tkinter.Button(top, text='Start recording',
-                                         command=start_record)
-    stop_record_button = tkinter.Button(top, text='Stop recording',
-                                        command=stop_record)
-    toggle_bright_particle_button = tkinter.Button(
-        top, text='Toggle particle brightness',
-        command=toggle_bright_particle)
-
-    threshold_entry = tkinter.Entry(top, bd=5)
-    temperature_entry = tkinter.Entry(top, bd=5)
-    toggle_tracking_button = tkinter.Button(
-        top, text='Toggle particle tracking', command=toggle_tracking)
-
-    def set_threshold():
-        entry = threshold_entry.get()
-        try:
-            threshold = int(entry)
-            if 0 < threshold < 255:
-                c_p['particle_threshold'] = threshold
-                print("Threshold set to ", threshold)
-            else:
-                print('Threshold out of bounds')
-        except:
-            print('Cannot convert entry to integer')
-        threshold_entry.delete(0, last=5000)
-
-    def set_temperature():
-        entry = temperature_entry.get()
-        try:
-            temperature = float(entry)
-            if 20 < temperature < 40:
-                c_p['setpoint_temperature'] = temperature
-                print("Temperature set to ", temperature)
-            else:
-                print('Temperature out of bounds, it is no good to cook or \
-                      freeze your samples')
-        except:
-            print('Cannot convert entry to integer')
-        temperature_entry.delete(0, last=5000)
-
-    threshold_button = tkinter.Button(
-        top, text='Set threshold', command=set_threshold)
-    focus_up_button = tkinter.Button(
-        top, text='Move focus up', command=focus_up)
-    focus_down_button = tkinter.Button(
-        top, text='Move focus down', command=focus_down)
-    temperature_button = tkinter.Button(
-        top, text='Set setpoint temperature', command=set_temperature)
-    zoom_in_button = tkinter.Button(top, text='Zoom in', command=zoom_in)
-    zoom_out_button = tkinter.Button(top, text='Zoom out', command=zoom_out)
-
-    x_position = 1220
-    y_position = get_y_separation()
-    exit_button.place(x=x_position, y=y_position.__next__())
-    up_button.place(x=x_position, y=y_position.__next__())
-    down_button.place(x=x_position, y=y_position.__next__())
-    right_button.place(x=x_position, y=y_position.__next__())
-    left_button.place(x=x_position, y=y_position.__next__())
-    start_record_button.place(x=x_position, y=y_position.__next__())
-    stop_record_button.place(x=x_position, y=y_position.__next__())
-    toggle_bright_particle_button.place(x=x_position, y=y_position.__next__())
-    threshold_entry.place(x=x_position, y=y_position.__next__())
-    threshold_button.place(x=x_position, y=y_position.__next__())
-    toggle_tracking_button.place(x=x_position, y=y_position.__next__())
-    focus_up_button.place(x=x_position, y=y_position.__next__())
-    focus_down_button.place(x=x_position, y=y_position.__next__())
-    temperature_entry.place(x=x_position, y=y_position.__next__())
-    temperature_button.place(x=x_position, y=y_position.__next__())
-    zoom_in_button.place(x=x_position, y=y_position.__next__())
-    zoom_out_button.place(x=x_position, y=y_position.__next__())
-
-
 class CreateSLMThread(threading.Thread):
     def __init__(self, threadID, name):
         '''
@@ -281,19 +191,26 @@ class CreateSLMThread(threading.Thread):
                                     ym=ym[:nbr_active_traps])
         c_p['phasemask'] = SLM.GSW(
             N, M, Delta, nbr_iterations=c_p['SLM_iterations'])
-        c_p['traps_absolute_pos'] =\
-            np.zeros((2, nbr_active_traps))
-        c_p['traps_relative_pos'] =\
-            np.zeros((2, nbr_active_traps))
+        c_p['phasemask_updated'] = True
 
-        c_p['traps_absolute_pos'][0] =\
-            screen_x[:nbr_active_traps]
-        c_p['traps_absolute_pos'][1] =\
-            screen_y[:nbr_active_traps]
-        c_p['traps_relative_pos'][0] =\
-        [x - c_p['AOI'][0] for x in screen_x[:nbr_active_traps]]
-        c_p['traps_relative_pos'][1] =\
-        [y - c_p['AOI'][2] for y in screen_y[:nbr_active_traps]]
+        # c_p['traps_absolute_pos'] =\
+        #     np.zeros((2, nbr_active_traps))
+        # c_p['traps_relative_pos'] =\
+        #     np.zeros((2, nbr_active_traps))
+        #
+        # c_p['traps_absolute_pos'][0] =\
+        #     screen_x[:nbr_active_traps]
+        # c_p['traps_absolute_pos'][1] =\
+        #     screen_y[:nbr_active_traps]
+
+        SLM_loc_to_trap_loc(xm=xm[:nbr_active_traps], ym=ym[:nbr_active_traps])
+        update_traps_relative_pos() # TOOO make xm, ym into control parameters
+        print(c_p['traps_absolute_pos'])
+        print(c_p['traps_relative_pos'])
+        # c_p['traps_relative_pos'][0] =\
+        # [x - c_p['AOI'][0] for x in screen_x[:nbr_active_traps]]
+        # c_p['traps_relative_pos'][1] =\
+        # [y - c_p['AOI'][2] for y in screen_y[:nbr_active_traps]]
 
         c_p['traps_occupied'] =\
             [False for i in range(len(c_p['traps_absolute_pos'][0]))]
@@ -313,19 +230,27 @@ class CreateSLMThread(threading.Thread):
                     c_p['phasemask_updated'] = True
                     c_p['new_phasemask'] = False
                     # Update the number of traps and their position
-                    c_p['traps_absolute_pos'] =\
-                        np.zeros((2,nbr_active_traps))
-                    c_p['traps_relative_pos'] =\
-                        np.zeros((2,nbr_active_traps))
 
-                    c_p['traps_absolute_pos'][0] =\
-                        screen_x[:nbr_active_traps]
-                    c_p['traps_absolute_pos'][1] =\
-                        screen_y[:nbr_active_traps]
-                    c_p['traps_relative_pos'][0] =\
-                        [x - c_p['AOI'][0] for x in screen_x[:nbr_active_traps]]
-                    c_p['traps_relative_pos'][1] =\
-                        [y - c_p['AOI'][2] for y in screen_y[:nbr_active_traps]]
+                    # c_p['traps_absolute_pos'] =\
+                    #     np.zeros((2,nbr_active_traps))
+                    # c_p['traps_relative_pos'] =\
+                    #     np.zeros((2,nbr_active_traps))
+                    #
+                    # c_p['traps_absolute_pos'][0] =\
+                    #     screen_x[:nbr_active_traps]
+                    # c_p['traps_absolute_pos'][1] =\
+                    #     screen_y[:nbr_active_traps]
+
+                    SLM_loc_to_trap_loc(xm=xm[:nbr_active_traps],
+                        ym=ym[:nbr_active_traps])
+                    update_traps_relative_pos()
+                    print(c_p['traps_absolute_pos'])
+                    print(c_p['traps_relative_pos'])
+                    # update_traps_relative_pos()
+                    # c_p['traps_relative_pos'][0] =\
+                    #     [x - c_p['AOI'][0] for x in screen_x[:nbr_active_traps]]
+                    # c_p['traps_relative_pos'][1] =\
+                    #     [y - c_p['AOI'][2] for y in screen_y[:nbr_active_traps]]
 
                     c_p['traps_occupied'] =\
                         [False for i in range(len(c_p['traps_absolute_pos'][0]))]
@@ -443,6 +368,98 @@ class TkinterDisplay:
         start_threads()
 
         self.window.mainloop()
+    def create_buttons(self,top):
+        def get_y_separation(start=50, distance=40):
+            # Simple generator to avoid printing all the y-positions of the
+            # buttons
+
+            index = 0
+            while True:
+                yield start + (distance * index)
+                index += 1
+
+        global c_p
+
+        exit_button = tkinter.Button(top, text='Exit program',
+                                     command=terminate_threads)
+        up_button = tkinter.Button(top, text='Move up',
+                                   command=partial(move_button, 0))
+        down_button = tkinter.Button(top, text='Move down',
+                                     command=partial(move_button, 1))
+        right_button = tkinter.Button(top, text='Move right',
+                                      command=partial(move_button, 2))
+        left_button = tkinter.Button(top, text='Move left',
+                                     command=partial(move_button, 3))
+        start_record_button = tkinter.Button(top, text='Start recording',
+                                             command=start_record)
+        stop_record_button = tkinter.Button(top, text='Stop recording',
+                                            command=stop_record)
+        toggle_bright_particle_button = tkinter.Button(
+            top, text='Toggle particle brightness',
+            command=toggle_bright_particle)
+
+        threshold_entry = tkinter.Entry(top, bd=5)
+        temperature_entry = tkinter.Entry(top, bd=5)
+        toggle_tracking_button = tkinter.Button(
+            top, text='Toggle particle tracking', command=toggle_tracking)
+
+        def set_threshold():
+            entry = threshold_entry.get()
+            try:
+                threshold = int(entry)
+                if 0 < threshold < 255:
+                    c_p['particle_threshold'] = threshold
+                    print("Threshold set to ", threshold)
+                else:
+                    print('Threshold out of bounds')
+            except:
+                print('Cannot convert entry to integer')
+            threshold_entry.delete(0, last=5000)
+
+        def set_temperature():
+            entry = temperature_entry.get()
+            try:
+                temperature = float(entry)
+                if 20 < temperature < 40:
+                    c_p['setpoint_temperature'] = temperature
+                    print("Temperature set to ", temperature)
+                else:
+                    print('Temperature out of bounds, it is no good to cook or \
+                          freeze your samples')
+            except:
+                print('Cannot convert entry to integer')
+            temperature_entry.delete(0, last=5000)
+
+        threshold_button = tkinter.Button(
+            top, text='Set threshold', command=set_threshold)
+        focus_up_button = tkinter.Button(
+            top, text='Move focus up', command=focus_up)
+        focus_down_button = tkinter.Button(
+            top, text='Move focus down', command=focus_down)
+        temperature_button = tkinter.Button(
+            top, text='Set setpoint temperature', command=set_temperature)
+        zoom_in_button = tkinter.Button(top, text='Zoom in', command=zoom_in)
+        zoom_out_button = tkinter.Button(top, text='Zoom out', command=zoom_out)
+
+        x_position = 1220
+        y_position = get_y_separation()
+        exit_button.place(x=x_position, y=y_position.__next__())
+        up_button.place(x=x_position, y=y_position.__next__())
+        down_button.place(x=x_position, y=y_position.__next__())
+        right_button.place(x=x_position, y=y_position.__next__())
+        left_button.place(x=x_position, y=y_position.__next__())
+        start_record_button.place(x=x_position, y=y_position.__next__())
+        stop_record_button.place(x=x_position, y=y_position.__next__())
+        toggle_bright_particle_button.place(x=x_position, y=y_position.__next__())
+        threshold_entry.place(x=x_position, y=y_position.__next__())
+        threshold_button.place(x=x_position, y=y_position.__next__())
+        toggle_tracking_button.place(x=x_position, y=y_position.__next__())
+        focus_up_button.place(x=x_position, y=y_position.__next__())
+        focus_down_button.place(x=x_position, y=y_position.__next__())
+        temperature_entry.place(x=x_position, y=y_position.__next__())
+        temperature_button.place(x=x_position, y=y_position.__next__())
+        zoom_in_button.place(x=x_position, y=y_position.__next__())
+        zoom_out_button.place(x=x_position, y=y_position.__next__())
 
     def create_SLM_window(self, _class):
         try:
@@ -1100,6 +1117,27 @@ def search_for_particles():
         c_p['search_direction']= 'right'
 
 
+def update_traps_relative_pos():
+    global c_p
+    tmp_x = [x - c_p['AOI'][0] for x in c_p['traps_absolute_pos'][0] ]
+    tmp_y = [y - c_p['AOI'][2] for y in c_p['traps_absolute_pos'][1] ]
+    tmp = np.asarray([tmp_x, tmp_y])
+    c_p['traps_relative_pos'] = tmp
+    '''
+    c_p['traps_relative_pos'][0] =\
+        [x - c_p['AOI'][0] for x in c_p['traps_absolute_pos'][0] ]
+    c_p['traps_relative_pos'][1] =\
+        [y - c_p['AOI'][2] for y in c_p['traps_absolute_pos'][1] ]
+    '''
+
+def SLM_loc_to_trap_loc(xm, ym):
+    global c_p
+    tmp_x = [x * c_p['slm_to_pixel'] + c_p['slm_x_center'] for x in xm]
+    tmp_y = [y * c_p['slm_to_pixel'] + c_p['slm_y_center'] for y in ym]
+    tmp = np.asarray([tmp_x, tmp_y])
+    c_p['traps_absolute_pos'] = tmp
+    print(c_p['traps_absolute_pos'][0] )
+    update_traps_relative_pos()
 ############### Main script starts here ####################################
 c_p = get_default_c_p()
 # Create camera and set defaults

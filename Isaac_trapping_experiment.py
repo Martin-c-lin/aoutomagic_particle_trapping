@@ -16,12 +16,11 @@ from cv2 import VideoWriter, VideoWriter_fourcc
 from tkinter import *
 import PIL.Image, PIL.ImageTk
 
-# TODO Combine this with Automagic trapping
-
 def get_default_c_p(recording_path=None):
     '''
-    Dictionary containing primarily parameters used for specifying the experiment and synchronizing
-    the program threads, such as current trap and motor serial numbers.
+    Dictionary containing primarily parameters used for specifying the
+    experiment and synchronizing the program threads, such as current trap and
+    motor serial numbers.
     '''
     # TODO : change this into a class
     if recording_path == None:
@@ -53,8 +52,8 @@ def get_default_c_p(recording_path=None):
     'framerate':10,
     'recording':False,
     'tracking_on':False,
-    'setpoint_temperature':30,
-    'current_temperature':30,
+    'setpoint_temperature':25,
+    'current_temperature':25,
     'starting_temperature':25,
     'temperature_stable':False,
     'search_direction':'right',
@@ -80,32 +79,26 @@ def get_default_c_p(recording_path=None):
     # Parameters specific to this experiment
 
 
-    'use_LGO': [True, True],
+    'use_LGO': [False,False,False],  # Set to true for the traps which should
+    # LGO beam instead of regular gaussian.
     'exposure_time':2,
     'SLM_iterations':30,
     'trap_separation':20e-6,
     'new_video':False,
     'recording_duration':3000,
-    'experiment_schedule':[20e-6,25],
+    'experiment_schedule':[20e-6, 25],
     'experiment_progress':0, # number of experiments run
     }
 
     # Set traps positions
-    c_p['traps_absolute_pos'] = np.zeros((2,1)) # This will need updating
-    c_p['traps_relative_pos'] = np.zeros((2,1))
+    c_p['traps_absolute_pos'] = np.zeros((2, 1)) # This will need updating
+    c_p['traps_relative_pos'] = np.zeros((2, 1))
 
     # Position of first trap
     c_p['traps_absolute_pos'][0][0] = 678
     c_p['traps_absolute_pos'][1][0] = 465
     c_p['traps_relative_pos'][0][0] = 678
     c_p['traps_relative_pos'][1][0] = 465
-    '''
-    for i in range(16):
-        c_p['traps_absolute_pos'][0][i] = 459+154*(i%4)#x
-        c_p['traps_absolute_pos'][1][i] = 311+154*(i//4)#y
-        c_p['traps_relative_pos'][0][i] = 459+154*(i%4)#x
-        c_p['traps_relative_pos'][1][i] = 311+154*(i//4)#y
-    '''
     c_p['traps_occupied'] = [False for i in range(len(c_p['traps_absolute_pos'][0]))]
     c_p['phasemask'] = np.zeros((1080,1080)) # phasemask of
     return c_p
@@ -238,7 +231,7 @@ def create_buttons(top):
         entry = separation_entry.get()
         try:
             separation = float(entry)*1e-6
-            if 0<=separation<40*1e-6:
+            if 0<=separation<100*1e-6:
                 c_p['trap_separation'] = separation
                 print("Trap separation set to ",separation)
                 c_p['new_phasemask'] = True
@@ -283,14 +276,15 @@ class CreateSLMThread(threading.Thread):
         global c_p
         nbr_active_traps = 2#1
         max_nbr_traps = 2
-        traps_positions = np.zeros((2,max_nbr_traps))
+        traps_positions = np.zeros((2, max_nbr_traps))
         phasemask_to_pixel = 10 # Ratio between length in pixels and length in phasemask generator
 
-        xm,ym = SLM.get_Isaac_xm_ym(d = c_p['trap_separation'])
+        xm, ym = SLM.get_xm_ym_triangle_with_center(d=c_p['trap_separation'])
+        # SLM.get_Isaac_xm_ym(d = c_p['trap_separation'])
         screen_x = [578,727]
         screen_y = [465,465]
         Delta,N,M = SLM.get_delta(xm=xm, ym=ym, use_LGO=c_p['use_LGO'])
-        c_p['phasemask'] = SLM.GS(N,M,Delta,nbr_iterations=c_p['SLM_iterations']) # Regular GS surperior to GSW when having only 2 traps
+        c_p['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=c_p['SLM_iterations']) # Regular GS surperior to GSW when having only 2 traps
         c_p['phasemask_updated'] = True
 
         c_p['traps_absolute_pos'] = np.zeros((2,nbr_active_traps))
@@ -307,9 +301,9 @@ class CreateSLMThread(threading.Thread):
             if c_p['new_phasemask']:
                 # Update number of traps in use
                 # Calcualte new delta and phasemask
-                xm,ym = SLM.get_Isaac_xm_ym(d = c_p['trap_separation'])
+                xm, ym = SLM.get_xm_ym_triangle_with_center(d=c_p['trap_separation'])
                 Delta,N,M = SLM.get_delta(xm=xm, ym=ym, use_LGO=c_p['use_LGO'])
-                c_p['phasemask'] = SLM.GS(N,M,Delta,nbr_iterations=c_p['SLM_iterations']) # Note changed to GS
+                c_p['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=c_p['SLM_iterations']) # Note changed to GS
                 c_p['phasemask_updated'] = True
                 # Update the number of traps and their position
                 c_p['traps_absolute_pos'] = np.zeros((2,nbr_active_traps))
@@ -956,7 +950,7 @@ def zoom_in(margin=50):
     down = int(down // 10 * 10)
 
     c_p['framerate'] = 150 # Todo fix this so that it is better
-    set_AOI(left=700,right=800,up=580,down=820)
+    set_AOI(left=660, right=900, up=480, down=740)
 def zoom_out():
     # Zooms out the camera and sets default framerate
     c_p['framerate'] = 10
@@ -987,7 +981,7 @@ def search_for_particles():
         c_p['search_direction']= 'left'
     if c_p['search_direction']== 'left' and c_p['motor_current_pos'][0]<=c_p['motor_starting_pos'][0]:
         c_p['search_direction']= 'right'
-def move_particles_slowly(last_d = 30e-6):
+def move_particles_slowly(last_d=30e-6):
     # Function for moving the particles between the center and the edges
     # without dropping then
     global c_p
@@ -1021,14 +1015,14 @@ def move_particles_slowly(last_d = 30e-6):
 temperatures = [25]
 #for i in range(8):
 #    temperatures.append(28+(i+1)/10)
-distances = np.linspace(10,35,26)*1e-6#[ 11e-6, 12e-6,15e-6, 30e-6 ]#[33e-6,30e-6,25e-6,24e-6,23e-6,22e-6,21e-6,20e-6,19e-6,18e-6,17e-6,16e-6,15e-6,14e-6,13e-6,12.5e-6,12e-6,11.5e-6,11e-6]
+distances =[15e-6, 20e-6, 25e-6, 30e-6, 35e-6, 40e-6]#[ 11e-6, 12e-6,15e-6, 30e-6 ]#[33e-6,30e-6,25e-6,24e-6,23e-6,22e-6,21e-6,20e-6,19e-6,18e-6,17e-6,16e-6,15e-6,14e-6,13e-6,12.5e-6,12e-6,11.5e-6,11e-6]
 experiment_schedule = []
 for temp in temperatures:
     for distance in distances:
         experiment_schedule.append([distance,temp])
 print(experiment_schedule)
 ############### Main script starts here ####################################
-c_p = get_default_c_p()
+c_p = get_default_c_p() # C_P short for control_parameters
 c_p['experiment_schedule'] = experiment_schedule# Arranged a distance,temp
 
 # Create camera and set defaults

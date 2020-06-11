@@ -135,6 +135,41 @@ def get_xm_ym_rect(nbr_rows,nbr_columns, dx=30e-6,dy=30e-6, d0x=-115e-6, d0y=-11
             ym[i*nbr_columns+j] = d0y + dy*i
     return xm,ym
 
+def get_xm_ym_E_L_Triangle(d=30e-6, d0x=-115e-6, d0y=-115e-6):
+    '''
+    Generates xm,ym in a equilateral triangle with sidelength d and first
+    corner placed on (d0x,d0y)
+    '''
+    xm = np.zeros(3)
+    ym = np.zeros(3)
+
+    xm[0] = d0x
+    ym[0] = d0y
+    xm[1] = d0x
+    ym[1] = d0y + d
+    xm[2] = d0x + np.sqrt(3/4) * d
+    ym[2] = d0y + d/2
+    return xm, ym
+
+def get_xm_ym_triangle_with_center(d=30e-6, d0x=-115e-6, d0y=-115e-6):
+        '''
+        Generates xm,ym in a equilateral triangle with sidelength d and a
+        particle in the center at d0x,d0y
+        '''
+        xm = np.zeros(4)
+        ym = np.zeros(4)
+
+        xm[0] = d0x
+        ym[0] = d0y
+
+        xm[1] = d0x - d / np.sqrt(12)
+        ym[1] = d0y + d / 2
+        xm[2] = d0x - d / np.sqrt(12)
+        ym[2] = d0y - d / 2
+        xm[3] = d0x + d * (np.sqrt(3/4) - np.sqrt(1/12))
+        ym[3] = d0y
+
+        return xm,ym
 def get_Isaac_xm_ym(d=30e-6):
     d0x = -115e-6
     d0y = -115e-6
