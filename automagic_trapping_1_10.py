@@ -161,6 +161,8 @@ def start_threads():
 class CreateSLMThread(threading.Thread):
     def __init__(self, threadID, name):
         '''
+        Thread for controlling the SLM creation. When new_phasemask set to true
+        the phasemask is updated.
         Parameters
         ----------
         threadID : int
@@ -193,24 +195,9 @@ class CreateSLMThread(threading.Thread):
             N, M, Delta, nbr_iterations=c_p['SLM_iterations'])
         c_p['phasemask_updated'] = True
 
-        # c_p['traps_absolute_pos'] =\
-        #     np.zeros((2, nbr_active_traps))
-        # c_p['traps_relative_pos'] =\
-        #     np.zeros((2, nbr_active_traps))
-        #
-        # c_p['traps_absolute_pos'][0] =\
-        #     screen_x[:nbr_active_traps]
-        # c_p['traps_absolute_pos'][1] =\
-        #     screen_y[:nbr_active_traps]
-
         SLM_loc_to_trap_loc(xm=xm[:nbr_active_traps], ym=ym[:nbr_active_traps])
-        update_traps_relative_pos() # TOOO make xm, ym into control parameters
         print(c_p['traps_absolute_pos'])
         print(c_p['traps_relative_pos'])
-        # c_p['traps_relative_pos'][0] =\
-        # [x - c_p['AOI'][0] for x in screen_x[:nbr_active_traps]]
-        # c_p['traps_relative_pos'][1] =\
-        # [y - c_p['AOI'][2] for y in screen_y[:nbr_active_traps]]
 
         c_p['traps_occupied'] =\
             [False for i in range(len(c_p['traps_absolute_pos'][0]))]
@@ -231,26 +218,10 @@ class CreateSLMThread(threading.Thread):
                     c_p['new_phasemask'] = False
                     # Update the number of traps and their position
 
-                    # c_p['traps_absolute_pos'] =\
-                    #     np.zeros((2,nbr_active_traps))
-                    # c_p['traps_relative_pos'] =\
-                    #     np.zeros((2,nbr_active_traps))
-                    #
-                    # c_p['traps_absolute_pos'][0] =\
-                    #     screen_x[:nbr_active_traps]
-                    # c_p['traps_absolute_pos'][1] =\
-                    #     screen_y[:nbr_active_traps]
-
                     SLM_loc_to_trap_loc(xm=xm[:nbr_active_traps],
                         ym=ym[:nbr_active_traps])
-                    update_traps_relative_pos()
                     print(c_p['traps_absolute_pos'])
                     print(c_p['traps_relative_pos'])
-                    # update_traps_relative_pos()
-                    # c_p['traps_relative_pos'][0] =\
-                    #     [x - c_p['AOI'][0] for x in screen_x[:nbr_active_traps]]
-                    # c_p['traps_relative_pos'][1] =\
-                    #     [y - c_p['AOI'][2] for y in screen_y[:nbr_active_traps]]
 
                     c_p['traps_occupied'] =\
                         [False for i in range(len(c_p['traps_absolute_pos'][0]))]
@@ -826,7 +797,7 @@ def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
     '''
     Function for changing the Area Of Interest for the camera to the box specified by
     left,right,top,bottom
-    Assumes global access to
+    Assumes global access to c_p
     '''
     global c_p
 
@@ -844,7 +815,10 @@ def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
         else:
             print("Trying to set invalid area")
     else:
-        c_p['AOI'] = [c_p['traps_relative_pos'][0]-half_image_width, c_p['traps_relative_pos'][0]+half_image_width, c_p['traps_relative_pos'][1]-half_image_width, c_p['traps_relative_pos'][1]+half_image_width]# +1 due to deeptrack oddity
+        c_p['AOI'] = [c_p['traps_relative_pos'][0]-half_image_width,
+            c_p['traps_relative_pos'][0]+half_image_width,
+            c_p['traps_relative_pos'][1]-half_image_width,
+            c_p['traps_relative_pos'][1]+half_image_width]
     # else:
     #     # Use defult center
     #     c_p['AOI'] = [0,2*half_image_width,0,2*half_image_width]
@@ -855,11 +829,8 @@ def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
     c_p['new_AOI_display'] = True
 
     # Update trap relative position
-    c_p['traps_relative_pos'][0] = [x - c_p['AOI'][0] for x in c_p['traps_absolute_pos'][0]] #c_p['traps_absolute_pos'][0]- c_p['AOI'][0]
-    c_p['traps_relative_pos'][1] = [y - c_p['AOI'][2] for y in c_p['traps_absolute_pos'][1]]#c_p['traps_absolute_pos'][1]- c_p['AOI'][2]
-
-    #c_p['target_particle_center'] = [c_p['traps_relative_pos'][0],c_p['traps_relative_pos'][1]] # Don't want the motors to move just yet
-
+    c_p['traps_relative_pos'][0] = [x - c_p['AOI'][0] for x in c_p['traps_absolute_pos'][0]]
+    c_p['traps_relative_pos'][1] = [y - c_p['AOI'][2] for y in c_p['traps_absolute_pos'][1]]
     time.sleep(0.5) # Give motor threads time to catch up
     c_p['xy_movement_limit'] = 40
     c_p['motor_locks'][0].release()
@@ -996,18 +967,14 @@ def move_button(move_direction):
     move_distance = 200
     if move_direction==0:
         # Move up (Particles in image move up on the screen)
-        #c_p['jog_motor_in_direction'][3]=True
         c_p['motor_movements'][1] = move_distance
     elif move_direction==1:
         # Move down
         c_p['motor_movements'][1] = -move_distance
-        #c_p['jog_motor_in_direction'][2]=True
     elif move_direction==2:
-        # c_p['jog_motor_in_direction'][0]=True
         # Move right
         c_p['motor_movements'][0] = move_distance
     elif move_direction==3:
-        # c_p['jog_motor_in_direction'][1]=True
         # Move left
         c_p['motor_movements'][0] = -move_distance
     else:
@@ -1062,13 +1029,13 @@ def zoom_in(margin=50):
     # automagically zoom in on our traps
 
     left = max(min(c_p['traps_absolute_pos'][0]) - margin, 0)
-    left = int(left // 10 * 10)
+    left = int(left // 20 * 20)
     right = min(max(c_p['traps_absolute_pos'][0]) + margin, 1200)
-    right = int(right // 10 * 10)
+    right = int(right // 20 * 20)
     up = max(min(c_p['traps_absolute_pos'][1]) - margin, 0)
-    up = int(up // 10 * 10)
+    up = int(up // 20 * 20)
     down = min(max(c_p['traps_absolute_pos'][1]) + margin, 1000)
-    down = int(down // 10 * 10)
+    down = int(down // 20 * 20)
 
     c_p['framerate'] = 100 # Todo fix this so that it is better
     set_AOI(left=left, right=right, up=up, down=down)
@@ -1084,13 +1051,13 @@ def search_for_particles():
     Function for searching after particles. Threats the sample as a grid and
     systmatically searches it
     '''
-    x_max = 3
-    delta_y = 0.05
+    x_max = 3 # [mm]
+    delta_y = 0.05 # [mm]
     print('searching for particles in ' + c_p['search_direction'] + ' direction.')
     # Make movement
     # Todo, double check the signs of these
     if c_p['search_direction']== 'right':
-        c_p['motor_movements'][0] = 300
+        c_p['motor_movements'][0] = 300 # [px]
 
     elif c_p['search_direction']== 'left':
         c_p['motor_movements'][0] = -300
@@ -1123,12 +1090,6 @@ def update_traps_relative_pos():
     tmp_y = [y - c_p['AOI'][2] for y in c_p['traps_absolute_pos'][1] ]
     tmp = np.asarray([tmp_x, tmp_y])
     c_p['traps_relative_pos'] = tmp
-    '''
-    c_p['traps_relative_pos'][0] =\
-        [x - c_p['AOI'][0] for x in c_p['traps_absolute_pos'][0] ]
-    c_p['traps_relative_pos'][1] =\
-        [y - c_p['AOI'][2] for y in c_p['traps_absolute_pos'][1] ]
-    '''
 
 def SLM_loc_to_trap_loc(xm, ym):
     global c_p
