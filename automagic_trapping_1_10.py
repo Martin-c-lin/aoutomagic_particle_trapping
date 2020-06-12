@@ -86,7 +86,9 @@ def get_default_c_p(recording_path=None):
         'particle_size_threshold': 200,  # Parcticle detection threshold
         'bright_particle': True,  # Is particle brighter than the background?
         'xy_movement_limit': 1200,
-        'motor_locks': [threading.Lock(), threading.Lock()]
+        'motor_locks': [threading.Lock(), threading.Lock()],
+
+        'use_LGO':[False],
     }
 
     # Set traps positions
@@ -738,11 +740,12 @@ class TrackingThread(threading.Thread):
         self.threadID = threadID
         self.name = name
         self.setDaemon(True)
+
    def run(self):
        global image
        global c_p
        while c_p['continue_capture']: # Change to continue tracking?
-
+            time.sleep(0.3)
             if c_p['tracking_on']:
 
                    '''
@@ -774,12 +777,13 @@ class TrackingThread(threading.Thread):
                            c_p['z_movement'] = 40
                            c_p['return_z_home'] = False
                            print("LIFTING TIME!")
-                           if  c_p['AOI'][1]-c_p['AOI'][0]>900:
-                               zoom_in(margin=120)
+                           # if  c_p['AOI'][1]-c_p['AOI'][0]>900:
+                           #     zoom_in(margin=40)
                        else:
                            if c_p['AOI'][1]-c_p['AOI'][0]<900:
                                zoom_out()
                    else:
+                       # No particles were located in the frame
                        c_p['target_particle_center'] = []
 
                    # If there are no untrapped particles in the frame, go search for some.
@@ -790,7 +794,7 @@ class TrackingThread(threading.Thread):
                        # No untrapped particles
                    if False not in c_p['traps_occupied']:
                            c_p['new_phasemask'] = True
-            time.sleep(0.3) # Needed to prevent this thread from running too fast
+
 
 
 def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
@@ -1091,6 +1095,7 @@ def update_traps_relative_pos():
     tmp = np.asarray([tmp_x, tmp_y])
     c_p['traps_relative_pos'] = tmp
 
+
 def SLM_loc_to_trap_loc(xm, ym):
     global c_p
     tmp_x = [x * c_p['slm_to_pixel'] + c_p['slm_x_center'] for x in xm]
@@ -1099,6 +1104,8 @@ def SLM_loc_to_trap_loc(xm, ym):
     c_p['traps_absolute_pos'] = tmp
     print(c_p['traps_absolute_pos'][0] )
     update_traps_relative_pos()
+
+
 ############### Main script starts here ####################################
 c_p = get_default_c_p()
 # Create camera and set defaults

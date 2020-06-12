@@ -79,13 +79,14 @@ def get_default_c_p(recording_path=None):
     # Parameters specific to this experiment
 
 
-    'use_LGO': [False,False,False],  # Set to true for the traps which should
+    'use_LGO': [True, True],  # Set to true for the traps which should
     # LGO beam instead of regular gaussian.
+    'LGO_order': -8,
     'exposure_time':2,
     'SLM_iterations':30,
-    'trap_separation':20e-6,
+    'trap_separation':0,#20e-6,
     'new_video':False,
-    'recording_duration':3000,
+    'recording_duration':4000,
     'experiment_schedule':[20e-6, 25],
     'experiment_progress':0, # number of experiments run
     }
@@ -279,11 +280,11 @@ class CreateSLMThread(threading.Thread):
         traps_positions = np.zeros((2, max_nbr_traps))
         phasemask_to_pixel = 10 # Ratio between length in pixels and length in phasemask generator
 
-        xm, ym = SLM.get_xm_ym_triangle_with_center(d=c_p['trap_separation'])
-        # SLM.get_Isaac_xm_ym(d = c_p['trap_separation'])
+        xm, ym = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=1)
         screen_x = [578,727]
         screen_y = [465,465]
-        Delta,N,M = SLM.get_delta(xm=xm, ym=ym, use_LGO=c_p['use_LGO'])
+        Delta,N,M = SLM.get_delta(xm=xm, ym=ym, use_LGO=c_p['use_LGO'],
+            order=c_p['LGO_order'])
         c_p['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=c_p['SLM_iterations']) # Regular GS surperior to GSW when having only 2 traps
         c_p['phasemask_updated'] = True
 
@@ -301,8 +302,9 @@ class CreateSLMThread(threading.Thread):
             if c_p['new_phasemask']:
                 # Update number of traps in use
                 # Calcualte new delta and phasemask
-                xm, ym = SLM.get_xm_ym_triangle_with_center(d=c_p['trap_separation'])
-                Delta,N,M = SLM.get_delta(xm=xm, ym=ym, use_LGO=c_p['use_LGO'])
+                xm, ym = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=1)
+                Delta,N,M = SLM.get_delta(xm=xm, ym=ym, use_LGO=c_p['use_LGO'],
+                    order=c_p['LGO_order'])
                 c_p['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=c_p['SLM_iterations']) # Note changed to GS
                 c_p['phasemask_updated'] = True
                 # Update the number of traps and their position
@@ -328,9 +330,11 @@ class TemperatureThread(threading.Thread):
             self.threadID = threadID
             self.name = name
             self.temperature_history = []
-            self.temp_hist_length = 30#60
-            self.max_diff = max_diff # Maximum value by which temperature is allowed to deviate from target temperature
-            # for temperature to be considered as stable.
+            self.temp_hist_length = 30 # how long the temperature needs to be
+            # within max_diff to be considered as stable
+            self.max_diff = max_diff # Maximum value by which temperature is
+            # allowed to deviate from target temperature for temperature to be
+            # considered as stable.
             if temperature_controller is not None:
                 self.temperature_controller = temperature_controller
                 c_p['starting_temperature'] = self.temperature_controller.measure_temperature()
@@ -420,7 +424,7 @@ class TkinterDisplay:
 
             position_text = 'Current trap separation is: ' + str(c_p['trap_separation'])
             self.position_label = Label(self.window,text=position_text)
-            self.position_label.place(x=1220,y=800)
+            self.position_label.place(x=1220,y=720)
 
             temperature_text = 'Current objective temperature is: '\
                 +str(c_p['current_temperature'])+' C'+\
@@ -454,9 +458,12 @@ class TkinterDisplay:
             temperature_text += '\n Temperature is stable'
         else:
             temperature_text += '\n Temperature is not stable'
+
         self.temperature_label.config(text=temperature_text)
+
         position_text = 'Current trap separation is: ' + str(c_p['trap_separation'])+ \
         '\n Experiments run: '+str(c_p['experiment_progress'])+' out of: ' + str(len(c_p['experiment_schedule']))
+        position_text += '\n LGO is ' + str('use_LGO') + '\n order is ' + str(c_p['LGO_order'])
         self.position_label.config(text=position_text)
     def resize_display_image(self,img):
         img_size = np.shape(img)
@@ -619,7 +626,8 @@ class CameraThread(threading.Thread):
         image_height = c_p['AOI'][3]-c_p['AOI'][2]
         video_name = c_p['recording_path']+'/video-'+str(now.hour)+\
             '-'+str(now.minute)+'-'+str(now.second)+'T'+str(round(c_p['setpoint_temperature'],2))+\
-            'C_'+str(c_p['trap_separation'])+'um.avi'
+            'C_'+str(c_p['trap_separation'])+'um_LGO_order_' +str(c_p['LGO_order'])+ '.avi'
+            # Added LGO order to name for upcoming experiments
         video = VideoWriter(video_name, fourcc, float(c_p['framerate']), (image_width, image_height),isColor=False)
         return video,video_name
    def new_video(self):
@@ -689,8 +697,9 @@ class ExperimentControlThread(threading.Thread):
        while c_p['continue_capture']:
 
             if c_p['tracking_on']:
-                separation,temperature = experiment_schedule[run_no]
+                separation, temperature, order = experiment_schedule[run_no]
                 c_p['setpoint_temperature'] = temperature
+                c_p['LGO_order'] = order
                 if np.abs(separation-c_p['trap_separation'])>3e-6:
                     move_particles_slowly(separation)
                 c_p['trap_separation'] = separation
@@ -949,8 +958,8 @@ def zoom_in(margin=50):
     down = min(max(c_p['traps_absolute_pos'][1])+margin,1000)
     down = int(down // 10 * 10)
 
-    c_p['framerate'] = 150 # Todo fix this so that it is better
-    set_AOI(left=660, right=900, up=480, down=740)
+    c_p['framerate'] = 250 # Todo fix this so that it is better
+    set_AOI(left=700, right=800, up=580, down=680)
 def zoom_out():
     # Zooms out the camera and sets default framerate
     c_p['framerate'] = 10
@@ -1015,11 +1024,13 @@ def move_particles_slowly(last_d=30e-6):
 temperatures = [25]
 #for i in range(8):
 #    temperatures.append(28+(i+1)/10)
-distances =[15e-6, 20e-6, 25e-6, 30e-6, 35e-6, 40e-6]#[ 11e-6, 12e-6,15e-6, 30e-6 ]#[33e-6,30e-6,25e-6,24e-6,23e-6,22e-6,21e-6,20e-6,19e-6,18e-6,17e-6,16e-6,15e-6,14e-6,13e-6,12.5e-6,12e-6,11.5e-6,11e-6]
+distances = [0]
+LGO_orders = [-4, 4, -8, 8, -12, 12, 16, -16]
 experiment_schedule = []
 for temp in temperatures:
     for distance in distances:
-        experiment_schedule.append([distance,temp])
+        for LGO_order in LGO_orders:
+            experiment_schedule.append([distance, temp, LGO_order])
 print(experiment_schedule)
 ############### Main script starts here ####################################
 c_p = get_default_c_p() # C_P short for control_parameters

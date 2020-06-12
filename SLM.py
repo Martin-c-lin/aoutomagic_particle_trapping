@@ -183,7 +183,7 @@ def get_Isaac_xm_ym(d=30e-6):
     ym[1] = d0y+d
 
     return xm,ym
-def get_delta(image_width = 1080,xm=[],ym=[],use_LGO=[False],order=-8):
+def get_delta(image_width = 1080, xm=[], ym=[], use_LGO=[False], order=-8):
     """
     Calculates delta in paper. I.e the phase shift of light when travelling from
     the SLM to the trap position for a specific set of points
@@ -198,7 +198,6 @@ def get_delta(image_width = 1080,xm=[],ym=[],use_LGO=[False],order=-8):
     f = np.sqrt(2e-4*0.4) # Focal length of imaging system. Empirically found value
     z = 0
     lambda_ = 532e-9
-
 
 
     if len(xm)<1 or len(ym)<1:
