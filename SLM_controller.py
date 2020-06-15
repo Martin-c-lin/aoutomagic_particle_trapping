@@ -8,7 +8,7 @@ from functools import partial
 import PIL.Image, PIL.ImageTk
 from tkinter.ttk import *
 import SLM
-def get_default_control_parameters(
+def get_default_c_p(
     SLM_iterations = 30,
     phasemask_width = 1080,
     phasemask_height = 1080,
@@ -16,7 +16,7 @@ def get_default_control_parameters(
     '''
     Function for creating starting parameters of phasemask
     '''
-    control_parameters = {
+    c_p = {
         'new_phasemask' : False, # True if the phasemask is to be recalculated
         'phasemask_updated' : False, # True if the phasemask image needs to be updated
         'SLM_iterations' : int(SLM_iterations),
@@ -32,26 +32,27 @@ def get_default_control_parameters(
         'dy':20e-6,
         'nbr_SLM_rows':2,
         'nbr_SLM_columns':1,
-        'use_LGO':[True]
+        'use_LGO':[True],
+        'LGO_order':-8
     }
-    control_parameters['phasemask'] = np.zeros((control_parameters['phasemask_height'],control_parameters['phasemask_width']))
+    c_p['phasemask'] = np.zeros((c_p['phasemask_height'],c_p['phasemask_width']))
 
-    control_parameters['traps_absolute_pos'] = np.zeros((2,1)) # This will need updating
+    c_p['traps_absolute_pos'] = np.zeros((2,1)) # This will need updating
 
     # Position of first trap
-    control_parameters['traps_absolute_pos'][0][0] = 678
-    control_parameters['traps_absolute_pos'][1][0] = 465
+    c_p['traps_absolute_pos'][0][0] = 678
+    c_p['traps_absolute_pos'][1][0] = 465
 
-    control_parameters['xm'] = [control_parameters['d0x']]
-    control_parameters['ym'] = [control_parameters['d0y']]
+    c_p['xm'] = [c_p['d0x']]
+    c_p['ym'] = [c_p['d0y']]
 
-    return control_parameters
+    return c_p
 def start_threads():
     """
     Function for starting all the threads, can only be called once
     """
     global thread_list
-    global control_parameters
+    global c_p
     slm_thread =CreateSLMThread(1,'Thread-SLM')
     slm_thread.start()
     print('SLM thread started')
@@ -64,41 +65,47 @@ class CreateSLMThread(threading.Thread):
         self.setDaemon(True)
         self.update_xm_ym()
     def update_xm_ym(self):
-        global control_parameters
-        control_parameters['xm'],control_parameters['ym']= SLM.get_xm_ym_rect(
-                nbr_rows=control_parameters['nbr_SLM_rows'],
-                nbr_columns=control_parameters['nbr_SLM_columns'],
-                dx=control_parameters['dx'],
-                dy=control_parameters['dy'],
-                d0x=control_parameters['d0x'],
-                d0y=control_parameters['d0y'])
-        #control_parameters['use_LGO'] = [True for x in control_parameters['xm']]
+        global c_p
+        c_p['xm'],c_p['ym']= SLM.get_xm_ym_rect(
+                nbr_rows=c_p['nbr_SLM_rows'],
+                nbr_columns=c_p['nbr_SLM_columns'],
+                dx=c_p['dx'],
+                dy=c_p['dy'],
+                d0x=c_p['d0x'],
+                d0y=c_p['d0y'])
+        #c_p['use_LGO'] = [True for x in c_p['xm']]
     def run(self):
-        global control_parameters
+        global c_p
         self.update_xm_ym()
-        Delta,N,M = SLM.get_delta(xm=control_parameters['xm'], ym=control_parameters['ym'], use_LGO=control_parameters['use_LGO'])
+        Delta,N,M = SLM.get_delta(xm=c_p['xm'],
+            ym=c_p['ym'],
+            use_LGO=c_p['use_LGO'],
+            order = c_p['LGO_order'])
         self.generate_phasemask(Delta,N,M)
-        control_parameters['phasemask_updated'] = True
+        c_p['phasemask_updated'] = True
 
-        while control_parameters['experiment_running']:
-            if control_parameters['new_phasemask']:
+        while c_p['experiment_running']:
+            if c_p['new_phasemask']:
                 # Calcualte new delta and phasemask
                 self.update_xm_ym()
-                Delta,N,M = SLM.get_delta(xm=control_parameters['xm'], ym=control_parameters['ym'], use_LGO=control_parameters['use_LGO'])
+                Delta,N,M = SLM.get_delta(xm=c_p['xm'],
+                    ym=c_p['ym'],
+                    use_LGO=c_p['use_LGO'],
+                    order=c_p['LGO_order'])
                 self.generate_phasemask(Delta,N,M)
 
                 # Let the other threads know that a new phasemask has been calculated
-                control_parameters['phasemask_updated'] = True
-                control_parameters['new_phasemask'] = False
+                c_p['phasemask_updated'] = True
+                c_p['new_phasemask'] = False
             time.sleep(1)
     def generate_phasemask(self,Delta,N,M):
-        global control_parameters
-        if control_parameters['SLM_algorithm'] == 'GSW':
-            control_parameters['phasemask'] = SLM.GSW(N, M, Delta,
-                nbr_iterations=control_parameters['SLM_iterations'])
-        elif control_parameters['SLM_algorithm'] == 'GS':
-            control_parameters['phasemask'] = SLM.GS(N, M, Delta,
-                nbr_iterations=control_parameters['SLM_iterations'])
+        global c_p
+        if c_p['SLM_algorithm'] == 'GSW':
+            c_p['phasemask'] = SLM.GSW(N, M, Delta,
+                nbr_iterations=c_p['SLM_iterations'])
+        elif c_p['SLM_algorithm'] == 'GS':
+            c_p['phasemask'] = SLM.GS(N, M, Delta,
+                nbr_iterations=c_p['SLM_iterations'])
 
 
     def calculate_trap_position():
@@ -163,6 +170,7 @@ class TkinterDisplay:
         nbr_trap_columns_entry = tkinter.Entry(self.window,bd=5)
         d0x_entry = tkinter.Entry(self.window,bd=5)
         d0y_entry = tkinter.Entry(self.window,bd=5)
+        LGO_order_entry = tkinter.Entry(self.window,bd=5)
         def get_entry(tkinter_entry,type='int'):
             entry = tkinter_entry.get()
             tkinter_entry.delete(0,last=10000)
@@ -179,8 +187,8 @@ class TkinterDisplay:
         def update_from_entry(tkinter_entry,key,type='int',bounds=[-np.inf,np.inf],new_mask=False,scale=1):
             entry = get_entry(tkinter_entry,type)
             if entry is not None and entry>bounds[0] and entry<bounds[1]:
-                control_parameters[key] = entry*scale
-                control_parameters['new_phasemask'] = new_mask
+                c_p[key] = entry*scale
+                c_p['new_phasemask'] = new_mask
             else:
                 print('Value out of bounds')
         set_iterations = lambda : update_from_entry(iterations_entry, type='int', key='SLM_iterations', bounds=[0,1000])
@@ -191,6 +199,7 @@ class TkinterDisplay:
         set_SLM_columns = lambda : update_from_entry(nbr_trap_columns_entry, type='int', key='nbr_SLM_columns',bounds=[0,1000])
         set_d0x = lambda : update_from_entry(d0x_entry, type='float', key='d0x', bounds=[-200, 200], scale=1e-6)
         set_d0y = lambda : update_from_entry(d0y_entry, type='float', key='d0y', bounds=[-200, 200], scale=1e-6)
+        set_LGO_order = lambda : update_from_entry(LGO_order_entry, type='int', key='LGO_order', bounds=[-200, 200], scale=1)
 
         SLM_Iterations_button = tkinter.Button(self.window, text ='Set SLM iterations', command = set_iterations)
         set_dx_button = tkinter.Button(self.window, text ='Set particle separation -x ', command = set_dx)
@@ -200,6 +209,8 @@ class TkinterDisplay:
         SLM_columns_button = tkinter.Button(self.window, text ='Set SLM columns', command = set_SLM_columns)
         set_d0x_button = tkinter.Button(self.window, text ='Set d0x', command = set_d0x)
         set_d0y_button = tkinter.Button(self.window, text ='Set d0y', command = set_d0y)
+
+        set_LGO_order_button = tkinter.Button(self.window, text ='Set LGO order', command = set_LGO_order)
 
         recalculate_mask_button = tkinter.Button(self.window, text ='Recalculate mask', command = recalculate_mask)
         y_position = get_y_separation()
@@ -233,18 +244,21 @@ class TkinterDisplay:
         d0y_entry.place(x=x_position_2,y=y_position_2.__next__())
         set_d0y_button.place(x=x_position_2,y=y_position_2.__next__())
 
+        LGO_order_entry.place(x=x_position_2,y=y_position_2.__next__())
+        set_LGO_order_button.place(x=x_position_2,y=y_position_2.__next__())
+        
         self.create_algorithm_selection(x_position_2, y_position_2.__next__())
         self.create_LGO_selection(x_position_2, y_position_2.__next__())
 
     def create_indicators(self):
-            global control_parameters
-            position_text = 'Current trap separation is: ' + str(control_parameters['trap_separation'])
+            global c_p
+            position_text = 'Current trap separation is: ' + str(c_p['trap_separation'])
             self.position_label = Label(self.window,text=position_text)
             self.position_label.place(x=10,y=500)
 
 
-            setup_text = 'xms are : ' + str(control_parameters['xm'])
-            setup_text += '\n yms are : ' + str(control_parameters['ym'])
+            setup_text = 'xms are : ' + str(c_p['xm'])
+            setup_text += '\n yms are : ' + str(c_p['ym'])
             self.info_label = Label(self.window,text=setup_text)
             self.info_label.place(x=10,y=570)
 
@@ -253,16 +267,17 @@ class TkinterDisplay:
         '''
         Helper function for updating on-screen indicators
         '''
-        position_text = 'Current dx is: ' + str(control_parameters['dx']*1e6)+'  Current dy is: ' + str(control_parameters['dy']*1e6)
-        position_text += '\n Number of iterations set to: ' +str(control_parameters['SLM_iterations'])
-        if control_parameters['SLM_algorithm'] == 'GS':
+        position_text = 'Current dx is: ' + str(c_p['dx']*1e6)+'  Current dy is: ' + str(c_p['dy']*1e6)
+        position_text += '\n Number of iterations set to: ' +str(c_p['SLM_iterations'])
+        if c_p['SLM_algorithm'] == 'GS':
             position_text += '\n Using Grechbgerg-Saxton algorithm'
         else:
             position_text += '\n Using Weighted Grechbgerg-Saxton algorithm'
         self.position_label.config(text=position_text)
 
-        setup_text = 'xms are : ' + str(control_parameters['xm'])
-        setup_text += '\n yms are : ' + str(control_parameters['ym'])
+        setup_text = 'xms are : ' + str(c_p['xm'])
+        setup_text += '\n yms are : ' + str(c_p['ym'])
+        setup_text += '\n LGO order set to: ' +str(c_p['LGO_order'])
         self.info_label.config(text=setup_text)
 
     def resize_display_image(self,img):
@@ -279,28 +294,28 @@ class TkinterDisplay:
     def update(self):
          # Get a frame from the video source
          self.update_indicators()
-         control_parameters['SLM_algorithm'] = self.selected_algorithm.get()
-         control_parameters['use_LGO'] = [self.toggle_LGO.get()]
+         c_p['SLM_algorithm'] = self.selected_algorithm.get()
+         c_p['use_LGO'] = [self.toggle_LGO.get()]
          # if self.toggle_LGO.get():
          #     print('LGO on')
          # else:
          #     print('LGO off')
-         if control_parameters['phasemask_updated']:
+         if c_p['phasemask_updated']:
              self.SLM_Window.update()
-             control_parameters['phasemask_updated'] = False
+             c_p['phasemask_updated'] = False
          self.window.after(self.delay, self.update)
     #
     def __del__(self):
-         control_parameters['experiment_running'] = False
+         c_p['experiment_running'] = False
 class SLM_window(Frame):
-    global control_parameters
+    global c_p
     def __init__(self, master=None):
         Frame.__init__(self, master)
         self.master = master
         # Todo, make it possible to set this wherever
         self.master.geometry("1920x1080+1920+0")#("1080x1080+2340+0")#("1920x1080+2340+0")
         self.pack(fill=BOTH, expand=1)
-        self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(control_parameters['phasemask']))
+        self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(c_p['phasemask']))
 
         self.img = Label(self, image=self.photo )
         self.img.place(x=420, y=0)
@@ -310,14 +325,14 @@ class SLM_window(Frame):
         self.update()
     def update(self):
         # This implementation does work but is perhaps a tiny bit janky
-        self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(control_parameters['phasemask']))
+        self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(c_p['phasemask']))
         del self.img.image
         self.img = Label(self,image=self.photo)
         self.img.image = self.photo
         self.img.place(x=420, y=0) # Do not think this is needed
 
 def recalculate_mask():
-    control_parameters['new_phasemask'] = True
+    c_p['new_phasemask'] = True
 if __name__ == '__main__':
-    control_parameters = get_default_control_parameters()
+    c_p = get_default_c_p()
     T_D = TkinterDisplay(tkinter.Tk(), "SLM controlpanel")

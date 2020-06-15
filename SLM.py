@@ -203,6 +203,7 @@ def get_delta(image_width = 1080, xm=[], ym=[], use_LGO=[False], order=-8):
     if len(xm)<1 or len(ym)<1:
         xm,ym = get_default_xm_ym()
         use_LGO = [False for i in range(len(xm))]
+    # TODO make the order into a list
     if True in use_LGO:
         LGO = get_LGO(image_width,order=order)
     M = len(xm) # Total number of traps
