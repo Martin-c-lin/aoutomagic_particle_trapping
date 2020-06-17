@@ -55,7 +55,8 @@ def get_LGO(image_width=1080,order = -8):
 
     xc = image_width/2
     yc = image_width/2
-    xxx,yyy = np.meshgrid(np.linspace(1,image_width,image_width),np.linspace(1,image_width,image_width))
+    xxx,yyy = np.meshgrid(np.linspace(1,image_width,image_width),
+                    np.linspace(1,image_width,image_width))
     LGO = np.mod((order * atan2_vec_2d(yyy-yc,xxx-xc)) ,(2*pi)) # Ther should maybe be a +pi before mod 2pi
 
     return LGO
