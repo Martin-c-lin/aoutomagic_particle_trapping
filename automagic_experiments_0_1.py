@@ -71,6 +71,8 @@ def get_default_c_p(recording_path=None):
         'z_starting_position': 0,  # Where the experiments starts in z position
         'z_movement': 0,  # Target z-movement in "ticks" positive for up,
         # negative for down
+        'target_experiment_z': 400,  # height in ticks at which experiment should
+        # be performed
         'z_x_diff': -200,  # Used for compensating drift in z when moving the
         # sample. Caused by sample being slightly tilted Needs to be calibrated
         'z_y_diff': -400,
@@ -135,7 +137,8 @@ def terminate_threads():
         del thread
 
 
-def start_threads(cam=True,motor_x=True,motor_y=True,motor_z=True,slm=True,tracking=False,isaac=True,temp=True):
+def start_threads(cam=True, motor_x=True, motor_y=True, motor_z=True, slm=True,
+        tracking=False, isaac=True, temp=True):
     """
     Function for starting all the threads, can only be called once
     """
@@ -762,87 +765,167 @@ class CameraThread(threading.Thread):
 
 class ExperimentControlThread(threading.Thread):
    '''
-   Thread which does the tracking
+   Thread which does the tracking.
    '''
    def __init__(self, threadID, name):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
         self.setDaemon(True)
+   def catch_particle(self, min_index_trap=None, min_index_particle=None):
+        '''
+        Function for determimning where and how to move when min_index_particle
+        has been found
+        '''
+        global c_p
+        if min_index_particle is not None:
+          c_p['target_trap_pos'] = [c_p['traps_relative_pos'][0][min_index_trap],
+                                    c_p['traps_relative_pos'][1][min_index_trap]]
+          c_p['target_particle_center'] = [c_p['particle_centers'][0][min_index_particle],
+                                            c_p['particle_centers'][1][min_index_particle]]
+          c_p['motor_movements'][0] = -(c_p['target_trap_pos'][0] - c_p['target_particle_center'][0]) # Note: Sign of this depends on setup
+          c_p['motor_movements'][1] = c_p['target_trap_pos'][1] - c_p['target_particle_center'][1]
 
+          # If there is a trapped particle then we do not want to move very far so we accidentally lose it
+          if True in c_p['traps_occupied']:
+              c_p['xy_movement_limit'] = 40
+          else:
+              c_p['xy_movement_limit'] = 1200
+        else:
+            c_p['target_particle_center'] = []
+   def lift_for_experiment(self,patiance=3):
+       '''
+       Assumes that all particles have been caught.
+       patiance, how long(s) we allow a trap to be unoccipied for
+
+       Returns true if lift succeded
+       '''
+       # TODO, add parameter to check if lifting was ok
+       z_starting_pos = c_p['motor_current_pos'][2]
+       patiance_counter = 0
+       while c_p['target_experiment_z'] < c_p['motor_current_pos'][2] - z_starting_pos:
+            if self.check_exp_conditions()
+                c_p['z_movement'] = 40
+                c_p['return_z_home'] = False
+                patiance_counter = 0
+            else:
+                patiance_counter += 1
+            if patiance_counter >= patiance or not c_p['tracking_on']
+                c_p['return_z_home'] = True
+                return False
+        return True
+
+
+   def check_exp_conditions(self):
+        x, y = fpt.find_particle_centers(copy.copy(image),
+                                      threshold=c_p['particle_threshold'],
+                                      particle_size_threshold=c_p['particle_size_threshold'],
+                                      bright_particle=c_p['bright_particle'])
+        c_p['particle_centers'] = [x, y]
+        min_index_trap, min_index_particle = find_closest_unoccupied()
+        self.catch_particle(min_index_trap, min_index_particle)
+
+        if False not in c_p['traps_occupied']:
+            # All traps have been occupied
+            return True, -1
+        # Not all traps have been occupied, might need to go searching
+        return False, len(x)
+   def run_experiment(self, duration):
+       '''
+       Run an experiment for 'duration'.
+       Returns 0 if it ran to the end without interruption
+       '''
+        start = time.time()
+        c_p['recording'] = True
+        zoom_in()
+        while time.time() <= start + duration and c_p['tracking_on']:
+            time.sleep(1)
+        zoom_out()
+        c_p['recording'] = False
+        if time.time() >= start + duration:
+            return 0
+        return start + duration - time.time()
    def run(self):
+        '''
+        Plan - have an experiment procedure.
+        Before each experiment is allowed to start make sure all traps
+        which are supposed to be filled are filled.
+        Then lift the particles and start recording. If any particle
+        is dropped go down and refill the traps and continue* the
+        experiment.
+        In between each experiment(when experiment parameters are to be changed)
+        try to move the particles which are already trapped rather than
+        cathing new ones (unless this is necessary). Then change all desired parameters.
+
+
+        Control the experiments with a experiment Dictionary which
+        keeps track of 'c_p' which are to be changed during the experiment.
+        For instance might desire to change LGO orders as well as
+        particle distance and temperature,then this should be possible
+
+        * Do not record the full length but only the missing part of the video
+        '''
        global image
        global c_p
        while c_p['continue_capture']: # Change to continue tracking?
             time.sleep(0.3)
-            if c_p['tracking_on']:
 
-                   '''
-                   We are in full frame mode looking for a particle
-                   '''
-                   time.sleep(0.2)
-                   x,y = fpt.find_particle_centers(copy.copy(image),
-                                                    threshold=c_p['particle_threshold'],
-                                                    particle_size_threshold=c_p['particle_size_threshold'],
-                                                    bright_particle=c_p['bright_particle'])
-                   c_p['particle_centers'] = [x,y]
-                   '''
-                   Plan - have an experiment procedure.
-                   Before each experiment is allowed to start make sure all traps
-                   which are supposed to be filled are filled.
-                   Then lift the particles and start recording. If any particle
-                   is dropped go down and refill the traps and continue* the
-                   experiment.
-                   In between each experiment(when experiment parameters are to be changed)
-                   try to move the particles which are already trapped rather than
-                   cathing new ones (unless this is necessary). Then change all desired parameters.
+            # Look through the whole shedule, a list of dictionaries.
+            for setup_dict in experiment_schedule:
+                run_finished = False
+                update_c_p(setup_dict)
+                if c_p['tracking_on'] and not run_finished:
+                       '''
+                       We are (probably) in full frame mode looking for a particle
+                       '''
+                       time.sleep(0.2)
+                       all_filled, nbr_particles = self.check_exp_conditions()
+
+                       if not all_filled and nbr_particles < c_p['traps_occupied']:
+                           # Fewer particles than traps
+                           search_for_particles()
+                       if all_filled:
+                           if self.lift_for_experiment():
+                               start = time.time()
+                               c_p['recording'] = True
 
 
+                       '''
+                       x, y = fpt.find_particle_centers(copy.copy(image),
+                                                        threshold=c_p['particle_threshold'],
+                                                        particle_size_threshold=c_p['particle_size_threshold'],
+                                                        bright_particle=c_p['bright_particle'])
+                       c_p['particle_centers'] = [x, y]
+                       # Find the closest particles
+                       if len(x)>0: # Check that there are particles present
 
-                   Control the experiments with a experiment Dictionary which
-                   keeps track of 'c_p' which are to be changed during the experiment.
-                   For instance might desire to change LGO orders as well as
-                   particle distance and temperature,then this should be possible
-
-                   * Do not record the full length but only the missing part of the video
-                   '''
-                   # Find the closest particles
-                   if len(x)>0: # Check that there are particles present
-
-                       min_index_trap,min_index_particle = find_closest_unoccupied()
-                       if min_index_particle is not None:
-                           c_p['target_trap_pos'] = [c_p['traps_relative_pos'][0][min_index_trap],c_p['traps_relative_pos'][1][min_index_trap]]
-                           c_p['target_particle_center'] = [c_p['particle_centers'][0][min_index_particle],c_p['particle_centers'][1][min_index_particle]]
-                           c_p['motor_movements'][0] = -(c_p['target_trap_pos'][0] - c_p['target_particle_center'][0]) # Note: Sign of this depends on setup
-                           c_p['motor_movements'][1] = c_p['target_trap_pos'][1] - c_p['target_particle_center'][1]
-
-                           # If there is a trapped particle then we do not want to move very far so we accidentally lose it
-                           if True in c_p['traps_occupied']:
-                               c_p['xy_movement_limit'] = 40
+                           min_index_trap, min_index_particle = find_closest_unoccupied()
+                           # Try to move to the particle
+                           self.catch_particle(min_index_trap, min_index_particle)
+                           if False not in c_p['traps_occupied']:
+                               # redy to begin experiment.
+                                c_p['z_movement'] = 40
+                                c_p['return_z_home'] = False
+                                print("LIFTING TIME!")
                            else:
-                               c_p['xy_movement_limit'] = 1200
-                       if c_p['traps_occupied'].count(True)>8:
-                           c_p['z_movement'] = 40
-                           c_p['return_z_home'] = False
-                           print("LIFTING TIME!")
+                               if c_p['AOI'][1]-c_p['AOI'][0]<900:
+                                   zoom_out()
+
                        else:
-                           if c_p['AOI'][1]-c_p['AOI'][0]<900:
-                               zoom_out()
-                   else:
-                       # No particles were located in the frame
-                       c_p['target_particle_center'] = []
+                           # No particles were located in the frame
+                           c_p['target_particle_center'] = []
 
-                   # If there are no untrapped particles in the frame, go search for some.
-                   if False in c_p['traps_occupied']:
-                       c_p['return_z_home'] = True
-                   if len(x) == c_p['traps_occupied'].count(True) and False in c_p['traps_occupied']:
-                       search_for_particles()
-                       # No untrapped particles
-                   if False not in c_p['traps_occupied']:
-                           c_p['new_phasemask'] = True
+                       # If there are no untrapped particles in the frame, go search for some.
+                       if False in c_p['traps_occupied']:
+                           c_p['return_z_home'] = True
+                           zoom_out()
 
+                       if len(x) < len(c_p['traps_occupied']):
+                           search_for_particles()
+                           # No untrapped particles
+                       '''
 
-def update_c_p(keys,values):
+def update_c_p(update_dict):
     '''
     Simple function for updating c_p['keys'] with new values 'values'.
     '''
@@ -851,18 +934,20 @@ def update_c_p(keys,values):
     ok_parameters = ['use_LGO', 'LGO_order', 'xm', 'ym', 'setpoint_temperature',
     'recording_duration']
     requires_new_phasemask = ['use_LGO', 'LGO_order', 'xm', 'ym']
-    for key,value in zip(keys,values):
+
+    for key in update_dict:
         if key in ok_parameters
             try:
-                c_p[key] = value
-                if key in requires_new_phasemask:
-                    c_p['new_phasemask'] = True
+                c_p[key] = update_dict[key]
             except:
                 print('Could not update control parameter ', key, 'with value',
                 value)
                 return
         else:
             print('Invalid key: ', key)
+    for key in update_dict:
+        if key in requires_new_phasemask:
+            c_p['new_phasemask'] = True
 
 
 def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
@@ -1025,7 +1110,7 @@ def find_closest_unoccupied():
                 min_index_trap = trap_idx
                 min_index_particle = particle_idx
 
-    return min_index_trap,min_index_particle
+    return min_index_trap, min_index_particle
 
 
 def move_button(move_direction):
