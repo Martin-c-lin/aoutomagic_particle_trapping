@@ -53,7 +53,7 @@ def get_default_c_p(recording_path=None):
         'movement_threshold': 30,
         'framerate': 10,
         'recording': False,
-        'tracking_on': True,
+        'tracking_on': False,
         'setpoint_temperature': 25,
         'current_temperature': 25,
         'starting_temperature': 25,
@@ -93,7 +93,7 @@ def get_default_c_p(recording_path=None):
         'use_LGO':[False],
         'LGO_order': -8,
         'exposure_time':2,
-        'SLM_iterations':30,
+        'SLM_iterations':5,
         'trap_separation_x':20e-6,
         'trap_separation_y':20e-6,
         'new_video':False,
@@ -111,8 +111,18 @@ def get_default_c_p(recording_path=None):
     c_p['traps_absolute_pos'][1][0] = 465
     c_p['traps_relative_pos'][0][0] = 678
     c_p['traps_relative_pos'][1][0] = 465
-    c_p['xm'], c_p['ym'] =  SLM.get_xm_ym_rect(nbr_rows=2, nbr_columns=2)
-    SLM_loc_to_trap_loc(c_p['xm'],c_p['ym'])
+    c_p['xm'], c_p['ym'] =  SLM.get_xm_ym_rect(
+            nbr_rows=2, nbr_columns=2,
+            d0x=-40e-6, d0y=-40e-6)
+    #SLM_loc_to_trap_loc(c_p['xm'],c_p['ym'],c_p=c_p)
+
+    # Cannot call SLM_loc_to_trap_loc until c_p has been created so we manually
+    # converto from xm,ym to trap locs here
+    tmp_x = [x * c_p['slm_to_pixel'] + c_p['slm_x_center'] for x in c_p['xm']]
+    tmp_y = [y * c_p['slm_to_pixel'] + c_p['slm_y_center'] for y in c_p['ym']]
+    tmp = np.asarray([tmp_x, tmp_y])
+    c_p['traps_absolute_pos'] = tmp
+
     c_p['traps_occupied'] = [False for i in range(len(c_p['traps_absolute_pos'][0]))]
     c_p['phasemask'] = np.zeros((1080, 1080))  # phasemask  size
     return c_p
@@ -138,7 +148,7 @@ def terminate_threads():
 
 
 def start_threads(cam=True, motor_x=True, motor_y=True, motor_z=True, slm=True,
-        tracking=False, isaac=True, temp=True, experiment_schedule=None):
+        tracking=True, isaac=False, temp=True, experiment_schedule=None):
     """
     Function for starting all the threads, can only be called once
     """
@@ -336,9 +346,8 @@ class TemperatureThread(threading.Thread):
 
                     if len(self.temperature_history)>self.temp_hist_length:
                         self.temperature_history.pop()
-
-                    if max(np.abs(self.temperature_history -
-                        c_p['set_temperature']))< self.max_diff:
+                    history = [T-c_p['setpoint_temperature'] for T in self.temperature_history]
+                    if max(np.abs(history))<self.max_diff:
 
                         c_p['temperature_stable'] = True
 
@@ -827,23 +836,23 @@ class ExperimentControlThread(threading.Thread):
        z_starting_pos = c_p['motor_current_pos'][2]
        patiance_counter = 0
        while c_p['target_experiment_z'] < c_p['motor_current_pos'][2] - z_starting_pos:
-            if self.check_exp_conditions()
+            if self.check_exp_conditions():
                 c_p['z_movement'] = 40
                 c_p['return_z_home'] = False
                 patiance_counter = 0
             else:
                 patiance_counter += 1
-            if patiance_counter >= patiance or not c_p['tracking_on']
+            if patiance_counter >= patiance or not c_p['tracking_on']:
                 c_p['return_z_home'] = True
                 return False
-        return True
+       return True
 
 
    def check_exp_conditions(self, tracking_func=None):
-       '''
-       Checks if all traps are occupied. Returns true if this is the case.
-       Tries to catch the closes unoccupied particle.
-       '''
+        '''
+        Checks if all traps are occupied. Returns true if this is the case.
+        Tries to catch the closes unoccupied particle.
+        '''
         if tracking_func is None:
             x, y = fpt.find_particle_centers(copy.copy(image),
                       threshold=c_p['particle_threshold'],
@@ -863,11 +872,11 @@ class ExperimentControlThread(threading.Thread):
         return False, len(x), min_index_trap, min_index_particle
 
    def run_experiment(self, duration):
-       '''
-       Run an experiment for 'duration'.
-       Returns 0 if it ran to the end without interruption otherwise it
-       returns the amount of time remaining of the experiment.
-       '''
+        '''
+        Run an experiment for 'duration'.
+        Returns 0 if it ran to the end without interruption otherwise it
+        returns the amount of time remaining of the experiment.
+        '''
         start = time.time()
         c_p['recording'] = True
         zoom_in()
@@ -900,29 +909,34 @@ class ExperimentControlThread(threading.Thread):
 
         * Do not record the full length but only the missing part of the video
         '''
-       global image
-       global c_p
-       while c_p['continue_capture']: # Change to continue tracking?
-            time.sleep(0.3)
+        global image
+        global c_p
 
+        while c_p['continue_capture']: # Change to continue tracking?
+            time.sleep(0.3)
+            print('Schedule is ',self.experiment_schedule)
             # Look through the whole shedule, a list of dictionaries.
             for setup_dict in self.experiment_schedule:
                 run_finished = False
                 update_c_p(setup_dict)
+
+                #print('experiment setup done for', setup_dict)
+
                 if c_p['tracking_on'] and not run_finished:
                        '''
                        We are (probably) in full frame mode looking for a particle
                        '''
                        time.sleep(0.2)
-                       all_filled, nbr_particles, min_index_trap, min_index_particle = self.check_exp_conditions()
 
+                       all_filled, nbr_particles, min_index_trap, min_index_particle = self.check_exp_conditions()
+                       print(all_filled, nbr_particles, min_index_trap, min_index_particle )
                        if not all_filled and nbr_particles <= c_p['traps_occupied'].count(True): # should check number of trues in this
                            # Fewer particles than traps
                            search_for_particles()
-                       else if not all_filled and nbr_particles > c_p['traps_occupied'].count(True):
+                       elif not all_filled and nbr_particles > c_p['traps_occupied'].count(True):
                            self.catch_particle(min_index_trap=min_index_trap,
                                 min_index_particle=min_index_particle)
-                       else if all_filled:
+                       elif all_filled:
                            if self.lift_for_experiment():
                                # TODO change so that run_experiment is called
                                # with the recording duration of this specific
@@ -943,7 +957,7 @@ def update_c_p(update_dict):
     requires_new_phasemask = ['use_LGO', 'LGO_order', 'xm', 'ym']
 
     for key in update_dict:
-        if key in ok_parameters
+        if key in ok_parameters:
             try:
                 c_p[key] = update_dict[key]
             except:
@@ -1257,6 +1271,10 @@ def update_traps_relative_pos():
 
 
 def SLM_loc_to_trap_loc(xm, ym):
+    '''
+    Fucntion for updating the traps position based on their locaitons
+    on the SLM.
+    '''
     global c_p
     tmp_x = [x * c_p['slm_to_pixel'] + c_p['slm_x_center'] for x in xm]
     tmp_y = [y * c_p['slm_to_pixel'] + c_p['slm_y_center'] for y in ym]
