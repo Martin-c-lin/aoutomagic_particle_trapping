@@ -57,6 +57,7 @@ def get_default_c_p(recording_path=None):
         'setpoint_temperature': 25,
         'current_temperature': 25,
         'starting_temperature': 25,
+        'temperature_stable': False,
         'search_direction': 'right',
         'particle_centers': [[500], [500]],
         'target_particle_center': [500, 500],  # Position of the particle we
@@ -71,15 +72,15 @@ def get_default_c_p(recording_path=None):
         'z_starting_position': 0,  # Where the experiments starts in z position
         'z_movement': 0,  # Target z-movement in "ticks" positive for up,
         # negative for down
-        'target_experiment_z': 400,  # height in ticks at which experiment should
+        'target_experiment_z': 150,  # height in ticks at which experiment should
         # be performed
         'z_x_diff': -200,  # Used for compensating drift in z when moving the
         # sample. Caused by sample being slightly tilted Needs to be calibrated
         'z_y_diff': -400,
         'temperature_z_diff': -190,  # How much the objective need to be moved
 
-        'slm_x_center':1274, # needs to be recalibrated if camera is moved
-        'slm_y_center':1136,
+        'slm_x_center': 793, # needs to be recalibrated if camera is moved
+        'slm_y_center': 835,
         'slm_to_pixel': 4550000.0,
         # to compensate for the changes in temperature.Measured in
         # [ticks/deg C]
@@ -97,7 +98,7 @@ def get_default_c_p(recording_path=None):
         'trap_separation_x':20e-6,
         'trap_separation_y':20e-6,
         'new_video':False,
-        'recording_duration':4000,
+        'recording_duration':20,
         'experiment_schedule':[20e-6, 25],
         'experiment_progress':0, # number of experiments run
     }
@@ -139,6 +140,7 @@ def terminate_threads():
     '''
     c_p['continue_capture'] = False
     c_p['motor_running'] = False
+    c_p['tracking_on'] = False
     time.sleep(1)
     global thread_list
     for thread in thread_list:
@@ -197,10 +199,9 @@ def start_threads(cam=True, motor_x=True, motor_y=True, motor_z=True, slm=True,
     if tracking:
         if experiment_schedule is None:
             experiment_schedule = [
-            {'setpoint_temperature':25,'xm':[-40e-6],'ym':[-40e-6]},
-            {'setpoint_temperature':25,'xm':[-45e-6],'ym':[-45e-6]},
-
-            ]
+            {'setpoint_temperature':25,'xm':[-40e-6, -10e-6],'ym':[-40e-6, -10e-6]},
+            {'setpoint_temperature':25,'xm':[-45e-6],'ym':[-45e-6]}
+            ] # TODO this is incorrect!
 
 
         tracking_thread = ExperimentControlThread(6,'Tracker_thread',experiment_schedule)
@@ -257,8 +258,8 @@ class CreateSLMThread(threading.Thread):
         c_p['phasemask_updated'] = True
         SLM_loc_to_trap_loc(xm=c_p['xm'], ym=c_p['ym'])
 
-        print(c_p['traps_absolute_pos'])
-        print(c_p['traps_relative_pos'])
+        #print(c_p['traps_absolute_pos'])
+        #print(c_p['traps_relative_pos'])
 
         c_p['traps_occupied'] =\
             [False for i in range(len(c_p['traps_absolute_pos'][0]))]
@@ -402,6 +403,7 @@ class TkinterDisplay:
 
         global c_p
 
+        # TODO add home z button
         exit_button = tkinter.Button(top, text='Exit program',
                                      command=terminate_threads)
         up_button = tkinter.Button(top, text='Move up',
@@ -550,10 +552,17 @@ class TkinterDisplay:
         else:
             self.tracking_label.config(text='particle tracking is off', bg='red')
         temperature_text = 'Current objective temperature is: '+str(c_p['current_temperature'])+' C'+'\n setpoint temperature is: '+str(c_p['setpoint_temperature'])+' C'
+        if c_p['temperature_stable']:
+            temperature_text += '\nTemperature is stable. '
+        else:
+            temperature_text += '\nTemperature is not stable. '
         self.temperature_label.config(text=temperature_text)
+
         position_text = 'x: '+str(c_p['motor_current_pos'][0])+\
             ' y: '+str(c_p['motor_current_pos'][1])+\
             ' z: '+str(c_p['motor_current_pos'][2])
+        position_text += '\n Experiments run ' + str(c_p['experiment_progress'])
+        position_text += ' out of'
         self.position_label.config(text=position_text)
 
     def resize_display_image(self, img):
@@ -835,16 +844,24 @@ class ExperimentControlThread(threading.Thread):
        # TODO, add parameter to check if lifting was ok
        z_starting_pos = c_p['motor_current_pos'][2]
        patiance_counter = 0
-       while c_p['target_experiment_z'] < c_p['motor_current_pos'][2] - z_starting_pos:
-            if self.check_exp_conditions():
+       print('Lifting time. Starting from ', z_starting_pos)
+       while c_p['target_experiment_z'] > c_p['motor_current_pos'][2] - z_starting_pos:
+            time.sleep(0.5)
+            all_filled, nbr_particles, min_index_trap, min_index_particle  =\
+                self.check_exp_conditions()
+            if all_filled:
                 c_p['z_movement'] = 40
                 c_p['return_z_home'] = False
                 patiance_counter = 0
+                # print('Particles at ', c_p['particle_centers'], ' traps at ' ,
+                #    c_p['traps_relative_pos'])
             else:
                 patiance_counter += 1
             if patiance_counter >= patiance or not c_p['tracking_on']:
                 c_p['return_z_home'] = True
+                c_p['z_movement'] = 0
                 return False
+       print('Lifting done. Now at',  c_p['motor_current_pos'][2])
        return True
 
 
@@ -862,6 +879,7 @@ class ExperimentControlThread(threading.Thread):
             x, y = tracking_func(copy.copy(image))
 
         c_p['particle_centers'] = [x, y]
+        c_p['traps_occupied'] = [False for i in range(len(c_p['traps_absolute_pos'][0]))]
         min_index_trap, min_index_particle = find_closest_unoccupied()
         #self.catch_particle(min_index_trap, min_index_particle)
 
@@ -881,8 +899,13 @@ class ExperimentControlThread(threading.Thread):
         c_p['recording'] = True
         zoom_in()
         while time.time() <= start + duration and c_p['tracking_on']:
-            if self.check_exp_conditions():
+            all_filled, nbr_particles, min_index_trap, min_index_particle  =\
+                self.check_exp_conditions()
+            if all_filled:
                 time.sleep(1)
+                print('Experiment is running', self.check_exp_conditions())
+            else:
+                break
         zoom_out()
         c_p['recording'] = False
         if time.time() >= start + duration:
@@ -919,31 +942,41 @@ class ExperimentControlThread(threading.Thread):
             for setup_dict in self.experiment_schedule:
                 run_finished = False
                 update_c_p(setup_dict)
+                time_remaining = c_p['recording_duration']
+                all_filled, nbr_particles, min_index_trap, min_index_particle = self.check_exp_conditions()
 
-                #print('experiment setup done for', setup_dict)
+                # Check if we need to go down and look for more particles in
+                # between the experiments
+                if not all_filled:
+                    c_p['return_z_home'] = True
+                    time.sleep(1)
+                while not run_finished: # Are both these conditions needed, (while and if)?
+                    time.sleep(0.3)
+                    if c_p['tracking_on'] and not run_finished:
+                           '''
+                           We are (probably) in full frame mode looking for a particle
+                           '''
 
-                if c_p['tracking_on'] and not run_finished:
-                       '''
-                       We are (probably) in full frame mode looking for a particle
-                       '''
-                       time.sleep(0.2)
-
-                       all_filled, nbr_particles, min_index_trap, min_index_particle = self.check_exp_conditions()
-                       print(all_filled, nbr_particles, min_index_trap, min_index_particle )
-                       if not all_filled and nbr_particles <= c_p['traps_occupied'].count(True): # should check number of trues in this
-                           # Fewer particles than traps
-                           search_for_particles()
-                       elif not all_filled and nbr_particles > c_p['traps_occupied'].count(True):
-                           self.catch_particle(min_index_trap=min_index_trap,
-                                min_index_particle=min_index_particle)
-                       elif all_filled:
-                           if self.lift_for_experiment():
-                               # TODO change so that run_experiment is called
-                               # with the recording duration of this specific
-                               # experiment
-                               self.run_experiment(c_p['recording_duration'])
-                           else:
-                               c_p['return_z_home'] = True
+                           all_filled, nbr_particles, min_index_trap, min_index_particle = self.check_exp_conditions()
+                           print(all_filled, nbr_particles, min_index_trap, min_index_particle )
+                           if not all_filled and nbr_particles <= c_p['traps_occupied'].count(True): # should check number of trues in this
+                               # Fewer particles than traps
+                               search_for_particles()
+                           elif not all_filled and nbr_particles > c_p['traps_occupied'].count(True):
+                               self.catch_particle(min_index_trap=min_index_trap,
+                                    min_index_particle=min_index_particle)
+                           elif all_filled:
+                               if self.lift_for_experiment():
+                                   # TODO change so that run_experiment is called
+                                   # with the recording duration of this specific
+                                   # experiment
+                                   print('lifted!')
+                                   time_remaining = self.run_experiment(time_remaining)
+                               else:
+                                   c_p['return_z_home'] = True
+                           if time_remaining < 1:
+                               run_finished = True
+                               c_p['experiment_progress'] += 1
 
 
 def update_c_p(update_dict):
@@ -951,9 +984,11 @@ def update_c_p(update_dict):
     Simple function for updating c_p['keys'] with new values 'values'.
     '''
     # TODO check if we can animate something somehow and decide which keys are ok
-    # maybe make experiment schedule into a Dictionary.
+    # maybe make experiment schedule into a Dictionary. Add possibility to
+    # Require temperature to be stable
     ok_parameters = ['use_LGO', 'LGO_order', 'xm', 'ym', 'setpoint_temperature',
     'recording_duration']
+
     requires_new_phasemask = ['use_LGO', 'LGO_order', 'xm', 'ym']
 
     for key in update_dict:
@@ -1047,9 +1082,12 @@ def get_particle_trap_distances():
         ]
     '''
     global c_p
-    nbr_traps = len(c_p['traps_absolute_pos'][0])
+    update_traps_relative_pos() # just in case
+    nbr_traps = len(c_p['traps_relative_pos'][0])
     nbr_particles = len(c_p['particle_centers'][0])
     distances = np.ones((nbr_traps, nbr_particles))
+
+    #print(c_p['particle_centers'][0])
     for i in range(nbr_traps):
         for j in range(nbr_particles):
             dx = (c_p['traps_relative_pos'][0][i] - c_p['particle_centers'][0][j])
@@ -1071,7 +1109,7 @@ def trap_occupied(distances, trap_index):
         return None
     for i in range(len(distances[trap_index, :])):
         dist_to_trap = distances[trap_index, i]
-        if dist_to_trap<=c_p['movement_threshold']:
+        if dist_to_trap <= c_p['movement_threshold']:
             c_p['traps_occupied'][trap_index] = True
             return i
     try:
@@ -1120,7 +1158,8 @@ def find_closest_unoccupied():
         trapped = c_p['traps_occupied'][trap_idx]
 
         # If there is not a particle trapped in the trap check for the closest particle
-        if not trapped:
+        if not trapped and len(distances[0]) > 0:
+            # Had problems with distances being [] if there were no particles
             particle_idx = np.argmin(distances[trap_idx])
 
             # If particle is within the threshold then update min_index and trap index as well as min distance

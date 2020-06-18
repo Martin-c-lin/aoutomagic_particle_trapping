@@ -1029,7 +1029,7 @@ temperatures = [25]
 #for i in range(8):
 #    temperatures.append(28+(i+1)/10)
 distances = [0]
-LGO_orders = [-4, 4, -8, 8, -12, 12, 16, -16]
+LGO_orders = [6,-6, 16, -16, 20, -20]
 experiment_schedule = []
 for temp in temperatures:
     for distance in distances:
