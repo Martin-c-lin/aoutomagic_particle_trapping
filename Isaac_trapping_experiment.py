@@ -85,6 +85,8 @@ def get_default_c_p(recording_path=None):
     'exposure_time':2,
     'SLM_iterations':30,
     'trap_separation':0,#20e-6,
+    'd0x':-30e-6,
+    'd0y':-30e-6,
     'new_video':False,
     'recording_duration':4000,
     'experiment_schedule':[20e-6, 25],
@@ -280,9 +282,10 @@ class CreateSLMThread(threading.Thread):
         traps_positions = np.zeros((2, max_nbr_traps))
         phasemask_to_pixel = 10 # Ratio between length in pixels and length in phasemask generator
 
-        xm, ym = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=1)
+        xm, ym = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=1,d0x=c_p['d0x'],d0y=c_p['d0y'])
         screen_x = [578,727]
         screen_y = [465,465]
+        print(xm,ym)
         Delta,N,M = SLM.get_delta(xm=xm, ym=ym, use_LGO=c_p['use_LGO'],
             order=c_p['LGO_order'])
         c_p['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=c_p['SLM_iterations']) # Regular GS surperior to GSW when having only 2 traps
@@ -302,7 +305,8 @@ class CreateSLMThread(threading.Thread):
             if c_p['new_phasemask']:
                 # Update number of traps in use
                 # Calcualte new delta and phasemask
-                xm, ym = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=1)
+                xm, ym = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=1,
+                    d0x=c_p['d0x'], d0y=c_p['d0y'])
                 Delta,N,M = SLM.get_delta(xm=xm, ym=ym, use_LGO=c_p['use_LGO'],
                     order=c_p['LGO_order'])
                 c_p['phasemask'] = SLM.GSW(N,M,Delta,nbr_iterations=c_p['SLM_iterations']) # Note changed to GS
@@ -463,7 +467,7 @@ class TkinterDisplay:
 
         position_text = 'Current trap separation is: ' + str(c_p['trap_separation'])+ \
         '\n Experiments run: '+str(c_p['experiment_progress'])+' out of: ' + str(len(c_p['experiment_schedule']))
-        position_text += '\n LGO is ' + str('use_LGO') + '\n order is ' + str(c_p['LGO_order'])
+        position_text += '\n LGO is ' + str(c_p['use_LGO']) + '\n order is ' + str(c_p['LGO_order'])
         self.position_label.config(text=position_text)
     def resize_display_image(self,img):
         img_size = np.shape(img)
@@ -959,7 +963,7 @@ def zoom_in(margin=50):
     down = int(down // 10 * 10)
 
     c_p['framerate'] = 250 # Todo fix this so that it is better
-    set_AOI(left=700, right=800, up=580, down=680)
+    set_AOI(left=560, right=740, up=620, down=800)
 def zoom_out():
     # Zooms out the camera and sets default framerate
     c_p['framerate'] = 10
