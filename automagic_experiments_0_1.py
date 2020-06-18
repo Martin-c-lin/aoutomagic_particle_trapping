@@ -138,7 +138,7 @@ def terminate_threads():
 
 
 def start_threads(cam=True, motor_x=True, motor_y=True, motor_z=True, slm=True,
-        tracking=False, isaac=True, temp=True):
+        tracking=False, isaac=True, temp=True, experiment_schedule=None):
     """
     Function for starting all the threads, can only be called once
     """
@@ -185,7 +185,15 @@ def start_threads(cam=True, motor_x=True, motor_y=True, motor_z=True, slm=True,
         print('SLM thread started')
 
     if tracking:
-        tracking_thread = ExperimentControlThread(6,'Tracker_thread')
+        if experiment_schedule is None:
+            experiment_schedule = [
+            {'setpoint_temperature':25,'xm':[-40e-6],'ym':[-40e-6]},
+            {'setpoint_temperature':25,'xm':[-45e-6],'ym':[-45e-6]},
+
+            ]
+
+
+        tracking_thread = ExperimentControlThread(6,'Tracker_thread',experiment_schedule)
         tracking_thread.start()
         thread_list.append(tracking_thread)
         print('Tracking thread started')
@@ -515,6 +523,7 @@ class TkinterDisplay:
                 str(c_p['setpoint_temperature']) + ' C'
         self.temperature_label = Label(self.window, text=temperature_text)
         self.temperature_label.place(x=1220, y=840)
+
     def update_indicators(self):
         '''
         Helper function for updating on-screen indicators
@@ -537,6 +546,7 @@ class TkinterDisplay:
             ' y: '+str(c_p['motor_current_pos'][1])+\
             ' z: '+str(c_p['motor_current_pos'][2])
         self.position_label.config(text=position_text)
+
     def resize_display_image(self, img):
         img_size = np.shape(img)
         #print(img_size)
@@ -548,6 +558,7 @@ class TkinterDisplay:
         else:
             dim = ( int(self.canvas_height), int(self.canvas_height/img_size[0]*img_size[1]))
         return cv2.resize(img, (dim[1],dim[0]), interpolation = cv2.INTER_AREA)
+
     def update(self):
          # Get a frame from the video source
          global image
@@ -563,6 +574,7 @@ class TkinterDisplay:
 
 class SLM_window(Frame):
     global c_p
+
     def __init__(self, master=None):
         Frame.__init__(self, master)
         self.master = master
@@ -576,6 +588,7 @@ class SLM_window(Frame):
         ####
         self.delay = 500
         self.update()
+
     def update(self):
         # This implementation does work but is perhaps a tiny bit janky
         self.photo = PIL.ImageTk.PhotoImage(image=PIL.Image.fromarray(c_p['phasemask']))
@@ -607,6 +620,7 @@ class MotorThread(threading.Thread):
       c_p['motor_starting_pos'][self.axis] = float(str(self.motor.Position))
       print('Motor is at ', c_p['motor_starting_pos'][self.axis])
       self.setDaemon(True)
+
     def run(self):
        print('Running motor thread')
        global c_p
@@ -647,6 +661,7 @@ class z_movement_thread(threading.Thread):
         self.piezo = TM.PiezoMotor(serial_no, channel=channel, pollingRate=polling_rate)
         c_p['z_starting_position'] = self.piezo.get_position()
         self.setDaemon(True)
+
     def compensate_focus(self):
         '''
         Function for compensating the change in focus caused by x-y movement.
@@ -657,6 +672,7 @@ class z_movement_thread(threading.Thread):
             +c_p['z_y_diff']*(c_p['motor_starting_pos'][1] - c_p['motor_current_pos'][1]) )
         new_z_pos += c_p['temperature_z_diff']*(c_p['current_temperature']-c_p['starting_temperature'])
         return int(new_z_pos)
+
     def run(self):
         global c_p
         lifting_distance = 0
@@ -707,6 +723,7 @@ class CameraThread(threading.Thread):
             float(c_p['framerate']),
             (image_width, image_height), isColor=False)
         return video, video_name
+
    def run(self):
 
        print('Initiating threaded capture sequence')
@@ -767,11 +784,16 @@ class ExperimentControlThread(threading.Thread):
    '''
    Thread which does the tracking.
    '''
-   def __init__(self, threadID, name):
+   def __init__(self, threadID, name, experiment_schedule):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
         self.setDaemon(True)
+        self.experiment_schedule = experiment_schedule
+
+   def __del__(self):
+       c_p['tracking_on'] = False
+
    def catch_particle(self, min_index_trap=None, min_index_particle=None):
         '''
         Function for determimning where and how to move when min_index_particle
@@ -793,6 +815,7 @@ class ExperimentControlThread(threading.Thread):
               c_p['xy_movement_limit'] = 1200
         else:
             c_p['target_particle_center'] = []
+
    def lift_for_experiment(self,patiance=3):
        '''
        Assumes that all particles have been caught.
@@ -816,35 +839,47 @@ class ExperimentControlThread(threading.Thread):
         return True
 
 
-   def check_exp_conditions(self):
-        x, y = fpt.find_particle_centers(copy.copy(image),
-                                      threshold=c_p['particle_threshold'],
-                                      particle_size_threshold=c_p['particle_size_threshold'],
-                                      bright_particle=c_p['bright_particle'])
+   def check_exp_conditions(self, tracking_func=None):
+       '''
+       Checks if all traps are occupied. Returns true if this is the case.
+       Tries to catch the closes unoccupied particle.
+       '''
+        if tracking_func is None:
+            x, y = fpt.find_particle_centers(copy.copy(image),
+                      threshold=c_p['particle_threshold'],
+                      particle_size_threshold=c_p['particle_size_threshold'],
+                      bright_particle=c_p['bright_particle'])
+        else:
+            x, y = tracking_func(copy.copy(image))
+
         c_p['particle_centers'] = [x, y]
         min_index_trap, min_index_particle = find_closest_unoccupied()
-        self.catch_particle(min_index_trap, min_index_particle)
+        #self.catch_particle(min_index_trap, min_index_particle)
 
         if False not in c_p['traps_occupied']:
             # All traps have been occupied
-            return True, -1
+            return True, -1, min_index_trap, min_index_particle
         # Not all traps have been occupied, might need to go searching
-        return False, len(x)
+        return False, len(x), min_index_trap, min_index_particle
+
    def run_experiment(self, duration):
        '''
        Run an experiment for 'duration'.
-       Returns 0 if it ran to the end without interruption
+       Returns 0 if it ran to the end without interruption otherwise it
+       returns the amount of time remaining of the experiment.
        '''
         start = time.time()
         c_p['recording'] = True
         zoom_in()
         while time.time() <= start + duration and c_p['tracking_on']:
-            time.sleep(1)
+            if self.check_exp_conditions():
+                time.sleep(1)
         zoom_out()
         c_p['recording'] = False
         if time.time() >= start + duration:
             return 0
         return start + duration - time.time()
+
    def run(self):
         '''
         Plan - have an experiment procedure.
@@ -871,7 +906,7 @@ class ExperimentControlThread(threading.Thread):
             time.sleep(0.3)
 
             # Look through the whole shedule, a list of dictionaries.
-            for setup_dict in experiment_schedule:
+            for setup_dict in self.experiment_schedule:
                 run_finished = False
                 update_c_p(setup_dict)
                 if c_p['tracking_on'] and not run_finished:
@@ -879,51 +914,23 @@ class ExperimentControlThread(threading.Thread):
                        We are (probably) in full frame mode looking for a particle
                        '''
                        time.sleep(0.2)
-                       all_filled, nbr_particles = self.check_exp_conditions()
+                       all_filled, nbr_particles, min_index_trap, min_index_particle = self.check_exp_conditions()
 
-                       if not all_filled and nbr_particles < c_p['traps_occupied']:
+                       if not all_filled and nbr_particles <= c_p['traps_occupied'].count(True): # should check number of trues in this
                            # Fewer particles than traps
                            search_for_particles()
-                       if all_filled:
+                       else if not all_filled and nbr_particles > c_p['traps_occupied'].count(True):
+                           self.catch_particle(min_index_trap=min_index_trap,
+                                min_index_particle=min_index_particle)
+                       else if all_filled:
                            if self.lift_for_experiment():
-                               start = time.time()
-                               c_p['recording'] = True
-
-
-                       '''
-                       x, y = fpt.find_particle_centers(copy.copy(image),
-                                                        threshold=c_p['particle_threshold'],
-                                                        particle_size_threshold=c_p['particle_size_threshold'],
-                                                        bright_particle=c_p['bright_particle'])
-                       c_p['particle_centers'] = [x, y]
-                       # Find the closest particles
-                       if len(x)>0: # Check that there are particles present
-
-                           min_index_trap, min_index_particle = find_closest_unoccupied()
-                           # Try to move to the particle
-                           self.catch_particle(min_index_trap, min_index_particle)
-                           if False not in c_p['traps_occupied']:
-                               # redy to begin experiment.
-                                c_p['z_movement'] = 40
-                                c_p['return_z_home'] = False
-                                print("LIFTING TIME!")
+                               # TODO change so that run_experiment is called
+                               # with the recording duration of this specific
+                               # experiment
+                               self.run_experiment(c_p['recording_duration'])
                            else:
-                               if c_p['AOI'][1]-c_p['AOI'][0]<900:
-                                   zoom_out()
+                               c_p['return_z_home'] = True
 
-                       else:
-                           # No particles were located in the frame
-                           c_p['target_particle_center'] = []
-
-                       # If there are no untrapped particles in the frame, go search for some.
-                       if False in c_p['traps_occupied']:
-                           c_p['return_z_home'] = True
-                           zoom_out()
-
-                       if len(x) < len(c_p['traps_occupied']):
-                           search_for_particles()
-                           # No untrapped particles
-                       '''
 
 def update_c_p(update_dict):
     '''
@@ -976,9 +983,7 @@ def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
             c_p['traps_relative_pos'][0]+half_image_width,
             c_p['traps_relative_pos'][1]-half_image_width,
             c_p['traps_relative_pos'][1]+half_image_width]
-    # else:
-    #     # Use defult center
-    #     c_p['AOI'] = [0,2*half_image_width,0,2*half_image_width]
+
     print('Setting AOI to ',c_p['AOI'])
 
     # Inform the camera and display thread about the updated AOI
@@ -986,10 +991,10 @@ def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
     c_p['new_AOI_display'] = True
 
     # Update trap relative position
-    c_p['traps_relative_pos'][0] = [x - c_p['AOI'][0] for x in c_p['traps_absolute_pos'][0]]
-    c_p['traps_relative_pos'][1] = [y - c_p['AOI'][2] for y in c_p['traps_absolute_pos'][1]]
-    time.sleep(0.5) # Give motor threads time to catch up
-    c_p['xy_movement_limit'] = 40
+    update_traps_relative_pos()
+
+    # Give motor threads time to catch up
+    time.sleep(0.5)
     c_p['motor_locks'][0].release()
     c_p['motor_locks'][1].release()
 
