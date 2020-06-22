@@ -51,12 +51,14 @@ def get_default_c_p(recording_path=None):
         'phasemask_updated': False,  # True if the phasemask is to be udpated
         'SLM_iterations': 30,
         'movement_threshold': 30,
+        'nbr_experiments':1,
         'framerate': 10,
         'recording': False,
         'tracking_on': False,
         'setpoint_temperature': 25,
         'current_temperature': 25,
-        'starting_temperature': 25,
+        'starting_temperature': 23.4,
+        'temperature_controller_connected': False,
         'temperature_stable': False,
         'search_direction': 'right',
         'particle_centers': [[500], [500]],
@@ -76,11 +78,16 @@ def get_default_c_p(recording_path=None):
         # be performed
         'z_x_diff': -200,  # Used for compensating drift in z when moving the
         # sample. Caused by sample being slightly tilted Needs to be calibrated
-        'z_y_diff': -400,
-        'temperature_z_diff': -190,  # How much the objective need to be moved
+        # calculated as the change needed in z (measured in steps) when the
+        # motor is moved 1 mm in positive direction z_x_diff = (z1-z0)/(x1-x0) steps/mm
+        'z_y_diff': 0,
+        'temperature_z_diff': 0, #-190,  # How much the objective need to be moved
+        # in ticks when the objective is heated 1C. Needs to be calibrated manually.
 
-        'slm_x_center': 793, # needs to be recalibrated if camera is moved
-        'slm_y_center': 835,
+        'slm_x_center': 700,#795, # needs to be recalibrated if camera is moved.
+        # This is the position of the 0th order of the SLM (ie where the trap)
+        # with xm=ym=0 is located in camera coordinates
+        'slm_y_center': 890,#840,
         'slm_to_pixel': 4550000.0,
         # to compensate for the changes in temperature.Measured in
         # [ticks/deg C]
@@ -98,7 +105,7 @@ def get_default_c_p(recording_path=None):
         'trap_separation_x':20e-6,
         'trap_separation_y':20e-6,
         'new_video':False,
-        'recording_duration':20,
+        'recording_duration':3000,
         'experiment_schedule':[20e-6, 25],
         'experiment_progress':0, # number of experiments run
     }
@@ -201,7 +208,7 @@ def start_threads(cam=True, motor_x=True, motor_y=True, motor_z=True, slm=True,
             experiment_schedule = [
             {'setpoint_temperature':25,'xm':[-40e-6, -10e-6],'ym':[-40e-6, -10e-6]},
             {'setpoint_temperature':25,'xm':[-45e-6],'ym':[-45e-6]}
-            ] # TODO this is incorrect!
+            ]
 
 
         tracking_thread = ExperimentControlThread(6,'Tracker_thread',experiment_schedule)
@@ -326,6 +333,7 @@ class TemperatureThread(threading.Thread):
                         self.temperature_controller.measure_temperature()
                     c_p['current_temperature'] =\
                         c_p['starting_temperature']
+                    c_p['temperature_controller_connected'] = True
                 except:
                     # Handling the case of not having a temperature controller
                     print('\nWARNING, COULD NOT ESTABLISH CONTACT WITH \
@@ -361,7 +369,7 @@ class TemperatureThread(threading.Thread):
 
 class TkinterDisplay:
 
-    def __init__(self, window, window_title,):
+    def __init__(self, window, window_title,experiment_schedule=None):
         self.window = window
         self.window.title(window_title)
 
@@ -385,7 +393,7 @@ class TkinterDisplay:
         self.create_SLM_window(SLM_window)
         self.create_indicators()
         self.update()
-        start_threads()
+        start_threads(experiment_schedule=experiment_schedule)
 
         self.window.mainloop()
 
@@ -562,12 +570,11 @@ class TkinterDisplay:
             ' y: '+str(c_p['motor_current_pos'][1])+\
             ' z: '+str(c_p['motor_current_pos'][2])
         position_text += '\n Experiments run ' + str(c_p['experiment_progress'])
-        position_text += ' out of'
+        position_text += ' out of ' + str(c_p['nbr_experiments'])
         self.position_label.config(text=position_text)
 
     def resize_display_image(self, img):
         img_size = np.shape(img)
-        #print(img_size)
         if img_size[1]==self.canvas_width or img_size[0] == self.canvas_height:
             return img
 
@@ -716,7 +723,7 @@ class z_movement_thread(threading.Thread):
                 print('homing z')
             time.sleep(0.3)
             c_p['motor_current_pos'][2] = self.piezo.get_position()
-
+        del(self.piezo)
 
 class CameraThread(threading.Thread):
    def __init__(self, threadID, name):
@@ -724,6 +731,17 @@ class CameraThread(threading.Thread):
       self.threadID = threadID
       self.name = name
       self.setDaemon(True)
+   def get_important_parameters(self):
+       global c_p
+       parameter_dict = {
+       'xm':c_p['xm'],
+       'ym':c_p['ym'],
+       'use_LGO':c_p['use_LGO'],
+       'LGO_order':c_p['LGO_order'],
+       'setpoint_temperature':c_p['setpoint_temperature'],
+       'target_experiment_z':c_p['target_experiment_z'],
+       }
+       return parameter_dict
 
    def create_video_writer(self):
         '''
@@ -737,9 +755,14 @@ class CameraThread(threading.Thread):
         image_height = c_p['AOI'][3]-c_p['AOI'][2]
         video_name = c_p['recording_path'] + '/moive-' + \
             str(now.hour) + '-' + str(now.minute) + '-' + str(now.second)+'.avi'
+        experiment_info_name =c_p['recording_path'] + '/moive-' + \
+            str(now.hour) + '-' + str(now.minute) + '-' + str(now.second) + 'info'
+
         video = VideoWriter(video_name, fourcc,
             float(c_p['framerate']),
             (image_width, image_height), isColor=False)
+        exp_params = self.get_important_parameters()
+        np.save(experiment_info_name, exp_params,  allow_pickle=True)
         return video, video_name
 
    def run(self):
@@ -773,7 +796,7 @@ class CameraThread(threading.Thread):
 
            # Create an array to store the images which have been captured in
            if not video_created:
-               video,video_name = self.create_video_writer()
+               video, video_name = self.create_video_writer()
                video_created = True
            # Start continously capturin images now that the camera parameters have been set
            while c_p['continue_capture']\
@@ -793,9 +816,12 @@ class CameraThread(threading.Thread):
            # Close the livefeed and calculate the fps of the captures
            end = time.time()
            cam.stop_live_video()
+           fps = image_count/(end-start)
            print('Capture sequence finished', image_count,
                 'Images captured in ', end-start, 'seconds. \n FPS is ',
-                image_count/(end-start))
+                fps)
+           fps_file = video_name[:-4] + 'fps'
+           np.save(fps_file, fps, allow_pickle=True)
 
 
 class ExperimentControlThread(threading.Thread):
@@ -896,6 +922,7 @@ class ExperimentControlThread(threading.Thread):
         returns the amount of time remaining of the experiment.
         '''
         start = time.time()
+
         c_p['recording'] = True
         zoom_in()
         while time.time() <= start + duration and c_p['tracking_on']:
@@ -934,60 +961,66 @@ class ExperimentControlThread(threading.Thread):
         '''
         global image
         global c_p
+        c_p['nbr_experiments'] = len(self.experiment_schedule)
+        c_p['experiment_progress'] = 0
 
         while c_p['continue_capture']: # Change to continue tracking?
             time.sleep(0.3)
-            print('Schedule is ',self.experiment_schedule)
+            #print('Schedule is ',self.experiment_schedule)
+            # Wi
             # Look through the whole shedule, a list of dictionaries.
-            for setup_dict in self.experiment_schedule:
-                run_finished = False
-                update_c_p(setup_dict)
-                time_remaining = c_p['recording_duration']
-                all_filled, nbr_particles, min_index_trap, min_index_particle = self.check_exp_conditions()
 
-                # Check if we need to go down and look for more particles in
-                # between the experiments
-                if not all_filled:
-                    c_p['return_z_home'] = True
-                    time.sleep(1)
-                while not run_finished: # Are both these conditions needed, (while and if)?
-                    time.sleep(0.3)
-                    if c_p['tracking_on'] and not run_finished:
-                           '''
-                           We are (probably) in full frame mode looking for a particle
-                           '''
+            if c_p['tracking_on']:
+                    setup_dict = self.experiment_schedule[c_p['experiment_progress']]
+                    print('Next experiment is', setup_dict)
+                    run_finished = False
+                    update_c_p(setup_dict)
+                    time_remaining = c_p['recording_duration']
+                    all_filled, nbr_particles, min_index_trap, min_index_particle = self.check_exp_conditions()
 
-                           all_filled, nbr_particles, min_index_trap, min_index_particle = self.check_exp_conditions()
-                           print(all_filled, nbr_particles, min_index_trap, min_index_particle )
-                           if not all_filled and nbr_particles <= c_p['traps_occupied'].count(True): # should check number of trues in this
-                               # Fewer particles than traps
-                               search_for_particles()
-                           elif not all_filled and nbr_particles > c_p['traps_occupied'].count(True):
-                               self.catch_particle(min_index_trap=min_index_trap,
-                                    min_index_particle=min_index_particle)
-                           elif all_filled:
-                               if self.lift_for_experiment():
-                                   # TODO change so that run_experiment is called
-                                   # with the recording duration of this specific
-                                   # experiment
-                                   print('lifted!')
-                                   time_remaining = self.run_experiment(time_remaining)
-                               else:
-                                   c_p['return_z_home'] = True
-                           if time_remaining < 1:
-                               run_finished = True
-                               c_p['experiment_progress'] += 1
+                    # Check if we need to go down and look for more particles in
+                    # between the experiments
+                    if not all_filled:
+                        c_p['return_z_home'] = True
+                        time.sleep(1)
+                    while not run_finished and c_p['tracking_on']: # Are both these conditions needed, (while and if)?
+                       time.sleep(0.3)
+                        #if c_p['tracking_on'] and not run_finished:
+                       '''
+                       We are (probably) in full frame mode looking for a particle
+                       '''
+
+                       all_filled, nbr_particles, min_index_trap, min_index_particle = self.check_exp_conditions()
+                       # print(all_filled, nbr_particles, min_index_trap, min_index_particle )
+                       if not all_filled and nbr_particles <= c_p['traps_occupied'].count(True): # should check number of trues in this
+                           # Fewer particles than traps
+                           search_for_particles()
+                       elif not all_filled and nbr_particles > c_p['traps_occupied'].count(True):
+                           self.catch_particle(min_index_trap=min_index_trap,
+                                min_index_particle=min_index_particle)
+                       elif all_filled:
+                           if self.lift_for_experiment():
+                               # TODO change so that run_experiment is called
+                               # with the recording duration of this specific
+                               # experiment
+                               print('lifted!')
+                               time_remaining = self.run_experiment(time_remaining)
+                           else:
+                               c_p['return_z_home'] = True
+                       if time_remaining < 1:
+                           run_finished = True
+                           c_p['experiment_progress'] += 1
 
 
 def update_c_p(update_dict):
     '''
     Simple function for updating c_p['keys'] with new values 'values'.
+    Ensures that all updates where successfull
     '''
-    # TODO check if we can animate something somehow and decide which keys are ok
-    # maybe make experiment schedule into a Dictionary. Add possibility to
-    # Require temperature to be stable
+    # TODO Add possibility to require temperature to be stable
+
     ok_parameters = ['use_LGO', 'LGO_order', 'xm', 'ym', 'setpoint_temperature',
-    'recording_duration']
+    'recording_duration', 'target_experiment_z']
 
     requires_new_phasemask = ['use_LGO', 'LGO_order', 'xm', 'ym']
 
@@ -1001,6 +1034,15 @@ def update_c_p(update_dict):
                 return
         else:
             print('Invalid key: ', key)
+    # Check that both xm and ym are updated
+    if len(c_p['xm']) > len(c_p['ym']):
+        c_p['xm'] = c_p['xm'][:len(c_p['ym'])]
+        print(' WARNING! xm and ym not the same length, cutting off xm!')
+
+    if len(c_p['ym']) > len(c_p['xm']):
+        c_p['ym'] = c_p['ym'][:len(c_p['xm'])]
+        print(' WARNING! xm and ym not the same length, cutting off ym!')
+
     for key in update_dict:
         if key in requires_new_phasemask:
             c_p['new_phasemask'] = True
@@ -1254,7 +1296,7 @@ def zoom_in(margin=50):
     down = min(max(c_p['traps_absolute_pos'][1]) + margin, 1000)
     down = int(down // 20 * 20)
 
-    c_p['framerate'] = 100 # Todo fix this so that it is better
+    c_p['framerate'] = 300 # Todo fix this so that it is better
     set_AOI(left=left, right=right, up=up, down=down)
 
 
@@ -1319,7 +1361,7 @@ def SLM_loc_to_trap_loc(xm, ym):
     tmp_y = [y * c_p['slm_to_pixel'] + c_p['slm_y_center'] for y in ym]
     tmp = np.asarray([tmp_x, tmp_y])
     c_p['traps_absolute_pos'] = tmp
-    print(c_p['traps_absolute_pos'][0] )
+    print('Traps are at: ', c_p['traps_absolute_pos'] )
     update_traps_relative_pos()
 
 
@@ -1364,13 +1406,33 @@ exposure_time = TC.find_exposure_time(cam) # automagically finds a decent exposu
 print('Exposure time = ', exposure_time)
 image = cam.grab_image()
 
-#c_p['particle_centers'][0],c_p['particle_centers'][1] = fpt.find_particle_centers(copy.copy(image),threshold = 150) # Do we need a copy of this or move it to another thread?s
-c_p['particle_centers'][0],c_p['particle_centers'][1] = c_p['traps_relative_pos'][0],c_p['traps_relative_pos'][1] # Do not want it wandering on its own
-
 # Create a empty list to put the threads in
 thread_list = []
 
-T_D = TkinterDisplay(tkinter.Tk(), "Control display")
+# Define experiment to be run
+experiment_schedule = [
+{'setpoint_temperature':25,'xm':[-40e-6],'ym':[-40e-6],'use_LGO':[True], 'LGO_order':-4,
+'target_experiment_z':0},
+{'setpoint_temperature':25,'xm':[-40e-6],'ym':[-40e-6],'use_LGO':[True], 'LGO_order':4,
+'target_experiment_z':0},
+{'setpoint_temperature':25,'xm':[-40e-6],'ym':[-40e-6],'use_LGO':[True], 'LGO_order':-8,
+'target_experiment_z':0},
+{'setpoint_temperature':25,'xm':[-40e-6],'ym':[-40e-6],'use_LGO':[True], 'LGO_order':8,
+'target_experiment_z':0},
+]
+
+# {'xm':[-30e-6, -45e-6, -60e-6, -30e-6, -45e-6, -60e-6, -30e-6, -45e-6, -60e-6],
+# 'ym':[-30e-6, -30e-6, -30e-6, -45e-6, -45e-6, -45e-6, -60e-6, -60e-6, -60e-6],
+# 'use_LGO':[False]},
+# {'xm':[-30e-6, -50e-6, -70e-6, -30e-6, -50e-6, -70e-6, -30e-6, -50e-6, -70e-6],
+# 'ym':[-30e-6, -30e-6, -30e-6, -50e-6, -50e-6, -50e-6, -70e-6, -70e-6, -70e-6],
+# 'use_LGO':[False]},
+# {'xm':[-30e-6, -55e-6, -80e-6, -30e-6, -45e-6, -60e-6, -30e-6, -45e-6, -60e-6],
+# 'ym':[-30e-6, -30e-6, -30e-6, -45e-6, -45e-6, -45e-6, -60e-6, -60e-6, -60e-6],
+# 'use_LGO':[False]},
+
+T_D = TkinterDisplay(tkinter.Tk(), "Control display",
+    experiment_schedule=experiment_schedule)
 
 # Close the threads and the camera
 c_p['continue_capture'] = False # All threds exits their main loop once this parameter is changed

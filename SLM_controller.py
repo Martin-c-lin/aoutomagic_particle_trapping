@@ -33,7 +33,8 @@ def get_default_c_p(
         'nbr_SLM_rows':2,
         'nbr_SLM_columns':1,
         'use_LGO':[True],
-        'LGO_order':-8
+        'LGO_order':-8,
+        # TODO add display option for traps locations
     }
     c_p['phasemask'] = np.zeros((c_p['phasemask_height'],c_p['phasemask_width']))
 
@@ -246,7 +247,7 @@ class TkinterDisplay:
 
         LGO_order_entry.place(x=x_position_2,y=y_position_2.__next__())
         set_LGO_order_button.place(x=x_position_2,y=y_position_2.__next__())
-        
+
         self.create_algorithm_selection(x_position_2, y_position_2.__next__())
         self.create_LGO_selection(x_position_2, y_position_2.__next__())
 
