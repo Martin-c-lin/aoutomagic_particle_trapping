@@ -125,10 +125,10 @@ def get_xm_ym_rect(nbr_rows,nbr_columns, dx=30e-6,dy=30e-6, d0x=-115e-6, d0y=-11
     '''
     Generates xm,ym in a rectangular grid with a particle-particle distance of d.
     '''
-    if nbr_rows<1 or nbr_columns<1:
+    if nbr_rows < 1 or nbr_columns < 1:
         return [],[]
-    xm = np.zeros((nbr_rows*nbr_columns))
-    ym = np.zeros((nbr_rows*nbr_columns))
+    xm = np.zeros((nbr_rows * nbr_columns))
+    ym = np.zeros((nbr_rows * nbr_columns))
 
     for i in range(nbr_rows):
         for j in range(nbr_columns):
@@ -170,10 +170,13 @@ def get_xm_ym_triangle_with_center(d=30e-6, d0x=-115e-6, d0y=-115e-6):
         xm[3] = d0x + d * (np.sqrt(3/4) - np.sqrt(1/12))
         ym[3] = d0y
 
-        return xm,ym
-def get_Isaac_xm_ym(d=30e-6):
-    d0x = -115e-6
-    d0y = -115e-6
+        return xm, ym
+def get_Isaac_xm_ym(d=30e-6, d0x=-115e-6, d0y=-115e-6):
+    '''
+    Two particles, first placed at [d0x, d0y] other at [d0x, d0y + d]
+    '''
+
+
     xm = np.zeros((2))
     ym = np.zeros((2))
 
@@ -183,7 +186,10 @@ def get_Isaac_xm_ym(d=30e-6):
     ym[0] = d0y
     ym[1] = d0y+d
 
-    return xm,ym
+    return xm, ym
+
+
+
 def get_delta(image_width = 1080, xm=[], ym=[], use_LGO=[False], order=-8):
     """
     Calculates delta in paper. I.e the phase shift of light when travelling from

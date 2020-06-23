@@ -55,8 +55,8 @@ def get_default_c_p(recording_path=None):
         'framerate': 10,
         'recording': False,
         'tracking_on': False,
-        'setpoint_temperature': 25,
-        'current_temperature': 25,
+        'setpoint_temperature': 24,
+        'current_temperature': 24,
         'starting_temperature': 23.4,
         'temperature_controller_connected': False,
         'temperature_stable': False,
@@ -80,6 +80,7 @@ def get_default_c_p(recording_path=None):
         # sample. Caused by sample being slightly tilted Needs to be calibrated
         # calculated as the change needed in z (measured in steps) when the
         # motor is moved 1 mm in positive direction z_x_diff = (z1-z0)/(x1-x0) steps/mm
+        # Sign ,+ or -,of this?
         'z_y_diff': 0,
         'temperature_z_diff': 0, #-190,  # How much the objective need to be moved
         # in ticks when the objective is heated 1C. Needs to be calibrated manually.
@@ -101,7 +102,7 @@ def get_default_c_p(recording_path=None):
         'use_LGO':[False],
         'LGO_order': -8,
         'exposure_time':2,
-        'SLM_iterations':30,
+        'SLM_iterations':5,
         'trap_separation_x':20e-6,
         'trap_separation_y':20e-6,
         'new_video':False,
@@ -258,7 +259,7 @@ class CreateSLMThread(threading.Thread):
         global c_p
 
         c_p['xm'], c_p['ym'] = SLM.get_default_xm_ym()
-        Delta, N, M = SLM.get_delta(xm=c_p['xm'], ym=c_p['xm'],
+        Delta, N, M = SLM.get_delta(xm=c_p['xm'], ym=c_p['ym'],
             use_LGO=c_p['use_LGO'],
             order=c_p['LGO_order'])
         c_p['phasemask'] = SLM.GSW(
@@ -720,13 +721,15 @@ class z_movement_thread(threading.Thread):
                     c_p['z_movement'] = 0
 
             elif c_p['return_z_home']:
-                self.piezo.move_to_position(self.compensate_focus()) # Or should it be the starging point? which is best?
+                # Or should it be the starging point? which is best?
+                self.piezo.move_to_position(self.compensate_focus())
                 lifting_distance = 0
                 c_p['return_z_home'] = False
                 print('homing z')
             time.sleep(0.3)
             c_p['motor_current_pos'][2] = self.piezo.get_position()
         del(self.piezo)
+
 
 class CameraThread(threading.Thread):
    def __init__(self, threadID, name):
@@ -831,6 +834,11 @@ class ExperimentControlThread(threading.Thread):
    '''
    Thread which does the tracking.
    '''
+   # TODO make it so that the program itself detects if the pattern contains
+   # "internal" particles which are difficult to trap, ex center particle in a
+   # 3x3 square grid of particles. Then the program should first fill the center
+   # traos by using a different phasemask for these.
+
    def __init__(self, threadID, name, experiment_schedule):
         threading.Thread.__init__(self)
         self.threadID = threadID
@@ -939,7 +947,7 @@ class ExperimentControlThread(threading.Thread):
             else:
                 break
         zoom_out()
-        c_p['recording'] = False
+        #c_p['recording'] = False
         if time.time() >= start + duration:
             return 0
         return start + duration - time.time()
@@ -1407,7 +1415,7 @@ c_p = get_default_c_p()
 # Create camera and set defaults
 cam = TC.get_camera()
 cam.set_defaults(left=c_p['AOI'][0], right=c_p['AOI'][1], top=c_p['AOI'][2], bot=c_p['AOI'][3], n_frames=1)
-exposure_time = TC.find_exposure_time(cam) # automagically finds a decent exposure time
+exposure_time = TC.find_exposure_time(cam, targetIntensity=70) # automagically finds a decent exposure time
 print('Exposure time = ', exposure_time)
 image = cam.grab_image()
 
@@ -1415,14 +1423,15 @@ image = cam.grab_image()
 thread_list = []
 
 # Define experiment to be run
-xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=2,nbr_columns=3, dx=30e-6,dy=30e-6, d0x=-115e-6, d0y=-115e-6)
-#get_xm_ym_triangle_with_center(d=30e-6, d0x=-40e-6, d0y=-40e-6)
+xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=3,nbr_columns=3, dx=15e-6,dy=15e-6, d0x=-30e-6, d0y=-50e-6)
+#.get_xm_ym_triangle_with_center(d=20e-6, d0x=-40e-6, d0y=-40e-6)
+xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=3,nbr_columns=3, dx=20e-6,dy=20e-6, d0x=-30e-6, d0y=-50e-6)
 
 experiment_schedule = [
-{'setpoint_temperature':25,'xm':xm1, 'ym':ym1, 'use_LGO':[False],
-'LGO_order':-8, 'target_experiment_z':1500, 'recording_duration':4_000},
-{'setpoint_temperature':25,'xm':xm1, 'ym':ym1, 'use_LGO':[False,True,True,True],
-'LGO_order':8, 'target_experiment_z':1500, 'recording_duration':4_000},
+{'setpoint_temperature':24,'xm':xm1, 'ym':ym1, 'use_LGO':[False],
+'LGO_order':-8, 'target_experiment_z':1500, 'recording_duration':4_000,'SLM_iterations':30},
+{'setpoint_temperature':24,'xm':xm2, 'ym':ym2, 'use_LGO':[False,],
+'LGO_order':-8, 'target_experiment_z':1500, 'recording_duration':4_000,'SLM_iterations':30}
 ]
 
 # {'xm':[-30e-6, -45e-6, -60e-6, -30e-6, -45e-6, -60e-6, -30e-6, -45e-6, -60e-6],
