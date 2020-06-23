@@ -101,13 +101,15 @@ def get_default_c_p(recording_path=None):
         'use_LGO':[False],
         'LGO_order': -8,
         'exposure_time':2,
-        'SLM_iterations':5,
+        'SLM_iterations':30,
         'trap_separation_x':20e-6,
         'trap_separation_y':20e-6,
         'new_video':False,
         'recording_duration':3000,
         'experiment_schedule':[20e-6, 25],
         'experiment_progress':0, # number of experiments run
+        'experiment_runtime':0, # How many seconds have the experiment been running
+        # TODO add progressbar for single experiments
     }
 
     # Set traps positions
@@ -274,7 +276,7 @@ class CreateSLMThread(threading.Thread):
         while c_p['continue_capture']:
             if c_p['new_phasemask']:
                 # Calcualte new delta and phasemask
-                Delta, N, M = SLM.get_delta(xm=c_p['xm'], ym=c_p['xm'],
+                Delta, N, M = SLM.get_delta(xm=c_p['xm'], ym=c_p['ym'],
                     use_LGO=c_p['use_LGO'],
                     order=c_p['LGO_order'])
                 c_p['phasemask'] = SLM.GSW(
@@ -571,6 +573,7 @@ class TkinterDisplay:
             ' z: '+str(c_p['motor_current_pos'][2])
         position_text += '\n Experiments run ' + str(c_p['experiment_progress'])
         position_text += ' out of ' + str(c_p['nbr_experiments'])
+        position_text += '  ' + str(c_p['experiment_runtime']) + 's run out of ' + str(c_p['recording_duration'])
         self.position_label.config(text=position_text)
 
     def resize_display_image(self, img):
@@ -701,7 +704,7 @@ class z_movement_thread(threading.Thread):
     def run(self):
         global c_p
         lifting_distance = 0
-
+        c_p['motor_current_pos'][2] = self.piezo.get_position()
         while c_p['continue_capture']:
 
             # Check if the objective should be moved
@@ -851,7 +854,8 @@ class ExperimentControlThread(threading.Thread):
                                             c_p['particle_centers'][1][min_index_particle]]
           c_p['motor_movements'][0] = -(c_p['target_trap_pos'][0] - c_p['target_particle_center'][0]) # Note: Sign of this depends on setup
           c_p['motor_movements'][1] = c_p['target_trap_pos'][1] - c_p['target_particle_center'][1]
-
+          print('Moving to ', c_p['motor_movements'])
+          print('Particle at ', c_p['target_particle_center'] )
           # If there is a trapped particle then we do not want to move very far so we accidentally lose it
           if True in c_p['traps_occupied']:
               c_p['xy_movement_limit'] = 40
@@ -930,7 +934,8 @@ class ExperimentControlThread(threading.Thread):
                 self.check_exp_conditions()
             if all_filled:
                 time.sleep(1)
-                print('Experiment is running', self.check_exp_conditions())
+                #print('Experiment is running', self.check_exp_conditions())
+                c_p['experiment_runtime'] = np.round(time.time() - start)
             else:
                 break
         zoom_out()
@@ -1020,9 +1025,9 @@ def update_c_p(update_dict):
     # TODO Add possibility to require temperature to be stable
 
     ok_parameters = ['use_LGO', 'LGO_order', 'xm', 'ym', 'setpoint_temperature',
-    'recording_duration', 'target_experiment_z']
+    'recording_duration', 'target_experiment_z', 'SLM_iterations']
 
-    requires_new_phasemask = ['use_LGO', 'LGO_order', 'xm', 'ym']
+    requires_new_phasemask = ['use_LGO', 'LGO_order', 'xm', 'ym', 'SLM_iterations']
 
     for key in update_dict:
         if key in ok_parameters:
@@ -1283,7 +1288,7 @@ def focus_down():
     c_p['z_starting_position'] -= 5
 
 
-def zoom_in(margin=50):
+def zoom_in(margin=60):
     # Helper function for zoom button.
     # automagically zoom in on our traps
 
@@ -1410,15 +1415,14 @@ image = cam.grab_image()
 thread_list = []
 
 # Define experiment to be run
+xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=2,nbr_columns=3, dx=30e-6,dy=30e-6, d0x=-115e-6, d0y=-115e-6)
+#get_xm_ym_triangle_with_center(d=30e-6, d0x=-40e-6, d0y=-40e-6)
+
 experiment_schedule = [
-{'setpoint_temperature':25,'xm':[-40e-6],'ym':[-40e-6],'use_LGO':[True], 'LGO_order':-4,
-'target_experiment_z':0},
-{'setpoint_temperature':25,'xm':[-40e-6],'ym':[-40e-6],'use_LGO':[True], 'LGO_order':4,
-'target_experiment_z':0},
-{'setpoint_temperature':25,'xm':[-40e-6],'ym':[-40e-6],'use_LGO':[True], 'LGO_order':-8,
-'target_experiment_z':0},
-{'setpoint_temperature':25,'xm':[-40e-6],'ym':[-40e-6],'use_LGO':[True], 'LGO_order':8,
-'target_experiment_z':0},
+{'setpoint_temperature':25,'xm':xm1, 'ym':ym1, 'use_LGO':[False],
+'LGO_order':-8, 'target_experiment_z':1500, 'recording_duration':4_000},
+{'setpoint_temperature':25,'xm':xm1, 'ym':ym1, 'use_LGO':[False,True,True,True],
+'LGO_order':8, 'target_experiment_z':1500, 'recording_duration':4_000},
 ]
 
 # {'xm':[-30e-6, -45e-6, -60e-6, -30e-6, -45e-6, -60e-6, -30e-6, -45e-6, -60e-6],
