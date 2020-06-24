@@ -28,6 +28,11 @@ def get_default_c_p(
         'SLM_algorithm' : 'GSW',
         'd0x':-115e-6,
         'd0y':-115e-6,
+        'slm_x_center': 700,#795, # needs to be recalibrated if camera is moved.
+        # This is the position of the 0th order of the SLM (ie where the trap)
+        # with xm=ym=0 is located in camera coordinates
+        'slm_y_center': 890,#840,
+        'slm_to_pixel':4550000.0,
         'dx':20e-6,
         'dy':20e-6,
         'nbr_SLM_rows':2,
@@ -67,14 +72,14 @@ class CreateSLMThread(threading.Thread):
         self.update_xm_ym()
     def update_xm_ym(self):
         global c_p
-        c_p['xm'],c_p['ym']= SLM.get_xm_ym_rect(
+        c_p['xm'],c_p['ym'] = SLM.get_xm_ym_rect(
                 nbr_rows=c_p['nbr_SLM_rows'],
                 nbr_columns=c_p['nbr_SLM_columns'],
                 dx=c_p['dx'],
                 dy=c_p['dy'],
                 d0x=c_p['d0x'],
                 d0y=c_p['d0y'])
-        #c_p['use_LGO'] = [True for x in c_p['xm']]
+        SLM_loc_to_trap_loc(c_p['xm'], c_p['ym'])
     def run(self):
         global c_p
         self.update_xm_ym()
@@ -122,7 +127,14 @@ class TkinterDisplay:
          self.window.title(window_title)
 
          # Create a canvas that can fit the above video source size
-         self.window.geometry('500x650')
+         self.window.geometry('700x500')
+
+         self.canvas_width = 240
+         self.canvas_height = 200
+         self.canvas = tkinter.Canvas(
+             window, width=self.canvas_width, height=self.canvas_height)
+         self.canvas.place(x=0, y=0)
+
          self.create_buttons()
          # After it is called once, the update method will be automatically called every delay milliseconds
          self.delay = 200
@@ -132,6 +144,7 @@ class TkinterDisplay:
          self.update()
          start_threads()
          self.window.mainloop()
+         self.mini_image = np.zeros((120,100,3))
     def create_SLM_window(self, _class):
         try:
             if self.new.state() == "normal":
@@ -139,6 +152,55 @@ class TkinterDisplay:
         except:
             self.new = tkinter.Toplevel(self.window)
             self.SLM_Window = _class(self.new)
+    def create_trap_image(self, trap_x=[], trap_y=[], particle_x=[], particle_y=[], AOI=[0,1200,0,1000]):
+
+        # Define new mini-image
+        mini_image = np.zeros((200,240,3))
+        scale_factor = 5
+        # Draw the traps
+        if len(trap_x) > 0 and len(trap_x) == len(trap_y):
+            for x, y in zip(trap_x, trap_y):
+                # Round down and recalculate
+                x = int(round(x/scale_factor))
+                y = int(round(y/scale_factor))
+
+                if 1 <= x <= 239 and 1 <= y <= 199:
+                    mini_image[(y-1):(y+2),(x-1):(x+2),0] = 255
+
+        # Draw the particles
+        if  len(particle_x) > 0 and len(particle_x) == len(particle_y):
+            for x, y in zip(particle_x, particle_y):
+                # Round down and recalculate
+                x = int(round(x/scale_factor))
+                y = int(round(y/scale_factor))
+                if 1 <= x <= 239 and 1 <= y <= 199:
+                    mini_image[y-1:y+1,x-1:x+1,2] = 255
+
+        # Draw the AOI
+        # l = int(round(AOI[0]/10))  # left
+        # r = int(round(AOI[1]/10))  # right
+        # u = int(round(AOI[2]/10))  # up
+        # d = int(round(AOI[3]/10))  # down
+
+        l = int(round(AOI[2]/scale_factor))  # left
+        r = int(round(AOI[3]/scale_factor))  # right
+        u = int(round(AOI[0]/scale_factor))  # up
+        d = int(round(AOI[1]/scale_factor))  # down
+
+        # TODO make it so that it handles edges better
+        try:
+            mini_image[l,u:d,:] = 255  # Left edge
+            mini_image[l:r,u,:] = 255  # Upper edge
+            mini_image[r,u:d,:] = 255  # Right edge
+            mini_image[l:r,d,:] = 255  # Bottom edge
+        except:
+            mini_image[0,0:-1,:] = 255  # Left edge
+            mini_image[0:-1,0,:] = 255  # Upper edge
+            mini_image[-1,0:-1,:] = 255  # Right edge
+            mini_image[0:-1,-1,:] = 255  # Bottom edge
+
+        self.mini_image = mini_image
+
     def create_algorithm_selection(self, x_pos, y_pos):
         self.selected_algorithm = StringVar()
         self.selected_algorithm.set('GSW')
@@ -158,7 +220,7 @@ class TkinterDisplay:
 
 
     def create_buttons(self):
-        def get_y_separation(start=50,distance=40):
+        def get_y_separation(start=5,distance=40):
             index = 0
             while True:
                 yield start + (distance * index)
@@ -217,8 +279,8 @@ class TkinterDisplay:
         y_position = get_y_separation()
         y_position_2 = get_y_separation() # for second column
 
-        x_position = 50
-        x_position_2 = 300
+        x_position = 310
+        x_position_2 = 500
 
         # Column 1
         recalculate_mask_button.place(x=x_position,y=y_position.__next__())
@@ -255,13 +317,14 @@ class TkinterDisplay:
             global c_p
             position_text = 'Current trap separation is: ' + str(c_p['trap_separation'])
             self.position_label = Label(self.window,text=position_text)
-            self.position_label.place(x=10,y=500)
+            self.position_label.place(x=10,y=240)
 
 
-            setup_text = 'xms are : ' + str(c_p['xm'])
+            setup_text = 'xms are : ' + str(c_p['xm']) # TODO change so this is
+            # written in console instead
             setup_text += '\n yms are : ' + str(c_p['ym'])
             self.info_label = Label(self.window,text=setup_text)
-            self.info_label.place(x=10,y=570)
+            self.info_label.place(x=10,y=410)
 
 
     def update_indicators(self):
@@ -297,13 +360,18 @@ class TkinterDisplay:
          self.update_indicators()
          c_p['SLM_algorithm'] = self.selected_algorithm.get()
          c_p['use_LGO'] = [self.toggle_LGO.get()]
-         # if self.toggle_LGO.get():
-         #     print('LGO on')
-         # else:
-         #     print('LGO off')
+
          if c_p['phasemask_updated']:
              self.SLM_Window.update()
              c_p['phasemask_updated'] = False
+         self.create_trap_image(trap_x=c_p['traps_absolute_pos'][0],
+            trap_y=c_p['traps_absolute_pos'][1])
+
+         self.mini_image = self.mini_image.astype('uint8')
+
+         self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(self.mini_image, mode='RGB'))
+         self.canvas.create_image(0, 0, image = self.photo, anchor = tkinter.NW) # need to use a compatible image type
+
          self.window.after(self.delay, self.update)
     #
     def __del__(self):
@@ -334,6 +402,16 @@ class SLM_window(Frame):
 
 def recalculate_mask():
     c_p['new_phasemask'] = True
+def SLM_loc_to_trap_loc(xm, ym):
+    '''
+    Fucntion for updating the traps position based on their locaitons
+    on the SLM.
+    '''
+    global c_p
+    tmp_x = [x * c_p['slm_to_pixel'] + c_p['slm_x_center'] for x in xm]
+    tmp_y = [y * c_p['slm_to_pixel'] + c_p['slm_y_center'] for y in ym]
+    tmp = np.asarray([tmp_x, tmp_y])
+    c_p['traps_absolute_pos'] = tmp
 if __name__ == '__main__':
     c_p = get_default_c_p()
     T_D = TkinterDisplay(tkinter.Tk(), "SLM controlpanel")
