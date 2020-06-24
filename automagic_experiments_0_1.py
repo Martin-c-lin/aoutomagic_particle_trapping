@@ -422,6 +422,13 @@ class TkinterDisplay:
         # Define new mini-image
         mini_image = np.zeros((200,240,3))
         scale_factor = 5
+
+        l = int(round(AOI[2]/scale_factor))  # left
+        r = int(round(AOI[3]/scale_factor))  # right
+        u = int(round(AOI[0]/scale_factor))  # up
+        d = int(round(AOI[1]/scale_factor))  # down
+
+        # Does not handle particle positions correctyl when zoomed in
         # Draw the traps
         if len(trap_x) > 0 and len(trap_x) == len(trap_y):
             for x, y in zip(trap_x, trap_y):
@@ -436,21 +443,12 @@ class TkinterDisplay:
         if  len(particle_x) > 0 and len(particle_x) == len(particle_y):
             for x, y in zip(particle_x, particle_y):
                 # Round down and recalculate
-                x = int(round(x/scale_factor))
-                y = int(round(y/scale_factor))
+                x = int(round(x/scale_factor + u))
+                y = int(round(y/scale_factor + l))
                 if 1 <= x <= 239 and 1 <= y <= 199:
                     mini_image[y-1:y+2,x-1:x+2,2] = 255
 
         # Draw the AOI
-        # l = int(round(AOI[0]/10))  # left
-        # r = int(round(AOI[1]/10))  # right
-        # u = int(round(AOI[2]/10))  # up
-        # d = int(round(AOI[3]/10))  # down
-
-        l = int(round(AOI[2]/scale_factor))  # left
-        r = int(round(AOI[3]/scale_factor))  # right
-        u = int(round(AOI[0]/scale_factor))  # up
-        d = int(round(AOI[1]/scale_factor))  # down
 
         # TODO make it so that it handles edges better
         try:
