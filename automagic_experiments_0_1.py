@@ -394,14 +394,14 @@ class TkinterDisplay:
 
         self.mini_canvas = tkinter.Canvas(
             window, width=self.mini_canvas_width, height=self.mini_canvas_height)
-        self.mini_canvas.place(x=1200, y=880)
+        self.mini_canvas.place(x=1200, y=800)
         self.mini_image = np.zeros((200,240,3))
         # Button that lets the user take a snapshot
         self.btn_snapshot = tkinter.Button(
             window, text="Snapshot", command=self.snapshot)
         self.btn_snapshot.place(x=1300, y=0)
         self.create_buttons(self.window)
-        self.window.geometry('1500x1080')
+        self.window.geometry('1700x1000')
         # After it is called once, the update method will be automatically
         # called every delay milliseconds
         self.delay = 50
@@ -439,7 +439,7 @@ class TkinterDisplay:
                 x = int(round(x/scale_factor))
                 y = int(round(y/scale_factor))
                 if 1 <= x <= 239 and 1 <= y <= 199:
-                    mini_image[y-1:y+1,x-1:x+1,2] = 255
+                    mini_image[y-1:y+2,x-1:x+2,2] = 255
 
         # Draw the AOI
         # l = int(round(AOI[0]/10))  # left
@@ -586,7 +586,7 @@ class TkinterDisplay:
         else:
             self.recording_label = Label(
                 self.window, text='recording is off', bg='red')
-        self.recording_label.place(x=1220, y=900)
+        self.recording_label.place(x=1220, y=750)
 
         if c_p['tracking_on']:
              self.tracking_label = Label(
@@ -594,7 +594,7 @@ class TkinterDisplay:
         else:
             self.tracking_label = Label(
                 self.window, text='particle tracking is off', bg='red')
-        self.tracking_label.place(x=1220, y=930)
+        self.tracking_label.place(x=1220, y=780)
 
         position_text = 'x: ' +\
             str(c_p['motor_current_pos'][0]) + 'mm.   y: ' \
@@ -602,14 +602,14 @@ class TkinterDisplay:
                 + str(c_p['motor_current_pos'][2])
 
         self.position_label = Label(self.window, text=position_text)
-        self.position_label.place(x=1220, y=800)
+        self.position_label.place(x=1420, y=200)
         # TODO add trap positions, preferably plotted as an image
         temperature_text = 'Current objective temperature is: '+\
             str(c_p['current_temperature']) + ' C' +\
                 '\n setpoint temperature is: ' +\
                 str(c_p['setpoint_temperature']) + ' C'
         self.temperature_label = Label(self.window, text=temperature_text)
-        self.temperature_label.place(x=1220, y=840)
+        self.temperature_label.place(x=1420, y=340)
 
     def update_indicators(self):
         '''
@@ -666,7 +666,7 @@ class TkinterDisplay:
          # Update mini-window
          self.create_trap_image()
          self.mini_photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(self.mini_image, mode='RGB'))
-         self.mini_canvas.create_image(0, 0, image = self.photo, anchor = tkinter.NW) # need to use a compatible image type
+         self.mini_canvas.create_image(0, 0, image = self.mini_photo, anchor = tkinter.NW) # need to use a compatible image type
 
          self.window.after(self.delay, self.update)
 
