@@ -367,8 +367,6 @@ class TkinterDisplay:
          self.create_trap_image(trap_x=c_p['traps_absolute_pos'][0],
             trap_y=c_p['traps_absolute_pos'][1])
 
-         #self.mini_image = self.mini_image.astype('uint8')
-
          self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(self.mini_image, mode='RGB'))
          self.canvas.create_image(0, 0, image = self.photo, anchor = tkinter.NW) # need to use a compatible image type
 
