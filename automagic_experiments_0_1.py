@@ -110,7 +110,6 @@ def get_default_c_p(recording_path=None):
         'experiment_schedule':[20e-6, 25],
         'experiment_progress':0, # number of experiments run
         'experiment_runtime':0, # How many seconds have the experiment been running
-        # TODO add progressbar for single experiments
     }
 
     # Set traps positions
@@ -385,16 +384,24 @@ class TkinterDisplay:
         # Create a canvas that can fit the above video source size
         self.canvas_width = 1200
         self.canvas_height = 1000
+
+        self.mini_canvas_width = 240
+        self.mini_canvas_height = 200
+
         self.canvas = tkinter.Canvas(
             window, width=self.canvas_width, height=self.canvas_height)
         self.canvas.place(x=0, y=0)
 
+        self.mini_canvas = tkinter.Canvas(
+            window, width=self.mini_canvas_width, height=self.mini_canvas_height)
+        self.mini_canvas.place(x=1200, y=880)
+        self.mini_image = np.zeros((200,240,3))
         # Button that lets the user take a snapshot
         self.btn_snapshot = tkinter.Button(
             window, text="Snapshot", command=self.snapshot)
         self.btn_snapshot.place(x=1300, y=0)
         self.create_buttons(self.window)
-        self.window.geometry('1500x1000')
+        self.window.geometry('1500x1080')
         # After it is called once, the update method will be automatically
         # called every delay milliseconds
         self.delay = 50
@@ -405,6 +412,59 @@ class TkinterDisplay:
         start_threads(experiment_schedule=experiment_schedule)
 
         self.window.mainloop()
+    def create_trap_image(self):
+        global c_p
+        trap_x = c_p['traps_absolute_pos'][0]
+        trap_y = c_p['traps_absolute_pos'][1]
+        particle_x = c_p['particle_centers'][0]
+        particle_y = c_p['particle_centers'][1]
+        AOI = c_p['AOI']
+        # Define new mini-image
+        mini_image = np.zeros((200,240,3))
+        scale_factor = 5
+        # Draw the traps
+        if len(trap_x) > 0 and len(trap_x) == len(trap_y):
+            for x, y in zip(trap_x, trap_y):
+                # Round down and recalculate
+                x = int(round(x/scale_factor))
+                y = int(round(y/scale_factor))
+
+                if 1 <= x <= 239 and 1 <= y <= 199:
+                    mini_image[(y-1):(y+2),(x-1):(x+2),0] = 255
+
+        # Draw the particles
+        if  len(particle_x) > 0 and len(particle_x) == len(particle_y):
+            for x, y in zip(particle_x, particle_y):
+                # Round down and recalculate
+                x = int(round(x/scale_factor))
+                y = int(round(y/scale_factor))
+                if 1 <= x <= 239 and 1 <= y <= 199:
+                    mini_image[y-1:y+1,x-1:x+1,2] = 255
+
+        # Draw the AOI
+        # l = int(round(AOI[0]/10))  # left
+        # r = int(round(AOI[1]/10))  # right
+        # u = int(round(AOI[2]/10))  # up
+        # d = int(round(AOI[3]/10))  # down
+
+        l = int(round(AOI[2]/scale_factor))  # left
+        r = int(round(AOI[3]/scale_factor))  # right
+        u = int(round(AOI[0]/scale_factor))  # up
+        d = int(round(AOI[1]/scale_factor))  # down
+
+        # TODO make it so that it handles edges better
+        try:
+            mini_image[l,u:d,:] = 255  # Left edge
+            mini_image[l:r,u,:] = 255  # Upper edge
+            mini_image[r,u:d,:] = 255  # Right edge
+            mini_image[l:r,d,:] = 255  # Bottom edge
+        except:
+            mini_image[0,0:-1,:] = 255  # Left edge
+            mini_image[0:-1,0,:] = 255  # Upper edge
+            mini_image[-1,0:-1,:] = 255  # Right edge
+            mini_image[0:-1,-1,:] = 255  # Bottom edge
+
+        self.mini_image = mini_image.astype('uint8')
 
     def create_buttons(self,top=None):
         if top is None:
@@ -520,7 +580,6 @@ class TkinterDisplay:
     def create_indicators(self):
         global c_p
         # Update if recording is turned on or not
-        # TODO replace this with an information box
         if c_p['recording']:
             self.recording_label = Label(
                 self.window, text='recording is on', bg='green')
@@ -544,7 +603,7 @@ class TkinterDisplay:
 
         self.position_label = Label(self.window, text=position_text)
         self.position_label.place(x=1220, y=800)
-        # TODO add trap positions
+        # TODO add trap positions, preferably plotted as an image
         temperature_text = 'Current objective temperature is: '+\
             str(c_p['current_temperature']) + ' C' +\
                 '\n setpoint temperature is: ' +\
@@ -558,7 +617,6 @@ class TkinterDisplay:
         '''
         global c_p
         # Update if recording is turned on or not
-        # TODO replace this with an information box
         if c_p['recording']:
             self.recording_label.config(text='recording is on', bg='green')
         else:
@@ -604,6 +662,12 @@ class TkinterDisplay:
          self.update_indicators()
          self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(self.resize_display_image(image)))
          self.canvas.create_image(0, 0, image = self.photo, anchor = tkinter.NW) # need to use a compatible image type
+
+         # Update mini-window
+         self.create_trap_image()
+         self.mini_photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(self.mini_image, mode='RGB'))
+         self.mini_canvas.create_image(0, 0, image = self.photo, anchor = tkinter.NW) # need to use a compatible image type
+
          self.window.after(self.delay, self.update)
 
 
@@ -758,8 +822,7 @@ class CameraThread(threading.Thread):
    def create_video_writer(self):
         '''
         Funciton for creating a VideoWriter.
-        TODO: Consider writing to a file to save the settings instead.
-        # Write framerate to this in the end
+        Will also save the relevant parameters of the experiments.
         '''
         now = datetime.datetime.now()
         fourcc = VideoWriter_fourcc(*'MJPG')
@@ -815,7 +878,7 @@ class CameraThread(threading.Thread):
                 and not c_p['new_AOI_camera']:
                cam.wait_for_frame(timeout=None)
                if c_p['recording']:
-                   video.write(image) # TODO, ensure this is done in the background
+                   video.write(image)
                # Capture an image and update the image count
                image_count = image_count+1
                image[:][:][:] = cam.latest_frame()
@@ -885,7 +948,6 @@ class ExperimentControlThread(threading.Thread):
 
        Returns true if lift succeded
        '''
-       # TODO, add parameter to check if lifting was ok
        z_starting_pos = c_p['motor_current_pos'][2]
        patiance_counter = 0
        print('Lifting time. Starting from ', z_starting_pos)
@@ -897,8 +959,6 @@ class ExperimentControlThread(threading.Thread):
                 c_p['z_movement'] = 40
                 c_p['return_z_home'] = False
                 patiance_counter = 0
-                # print('Particles at ', c_p['particle_centers'], ' traps at ' ,
-                #    c_p['traps_relative_pos'])
             else:
                 patiance_counter += 1
             if patiance_counter >= patiance or not c_p['tracking_on']:
@@ -1019,9 +1079,6 @@ class ExperimentControlThread(threading.Thread):
                                 min_index_particle=min_index_particle)
                        elif all_filled:
                            if self.lift_for_experiment():
-                               # TODO change so that run_experiment is called
-                               # with the recording duration of this specific
-                               # experiment
                                print('lifted!')
                                time_remaining = self.run_experiment(time_remaining)
                            else:
@@ -1079,8 +1136,7 @@ def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
     # Do not want motors to be moving when changing AOI!
     c_p['motor_locks'][0].acquire()
     c_p['motor_locks'][1].acquire()
-    # If exact values have been provided for all the
-    # TODO change so that this syntax is default
+    # If exact values have been provided for all the corners change AOI
     if left is not None and right is not None and up is not None and down is not None:
         if 0<=left<=1279 and left<=right<=1280 and 0<=up<=1079 and up<=down<=1080:
             c_p['AOI'][0] = left
@@ -1110,7 +1166,7 @@ def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
     c_p['motor_locks'][1].release()
 
 
-def predict_particle_position(network,half_image_width=50,
+def predict_particle_position_network(network,half_image_width=50,
     network_image_width=101,
     print_position=False):
     '''
@@ -1125,7 +1181,6 @@ def predict_particle_position(network,half_image_width=50,
     '''
     global image
     global c_p
-    #  TODO - Read half_image_width from the image
     resized = cv2.resize(copy.copy(image), (network_image_width,network_image_width), interpolation = cv2.INTER_AREA)
     pred = network.predict(np.reshape(resized/255,[1,network_image_width,network_image_width,1]))
 
@@ -1316,7 +1371,7 @@ def zoom_in(margin=60):
     down = min(max(c_p['traps_absolute_pos'][1]) + margin, 1000)
     down = int(down // 20 * 20)
 
-    c_p['framerate'] = 300 # Todo fix this so that it is better
+    c_p['framerate'] = 300  # Note calculated framerate is automagically saved.
     set_AOI(left=left, right=right, up=up, down=down)
 
 
@@ -1334,7 +1389,6 @@ def search_for_particles():
     delta_y = 0.05 # [mm]
     print('searching for particles in ' + c_p['search_direction'] + ' direction.')
     # Make movement
-    # Todo, double check the signs of these
     if c_p['search_direction']== 'right':
         c_p['motor_movements'][0] = 300 # [px]
 
@@ -1347,11 +1401,9 @@ def search_for_particles():
     elif c_p['search_direction']== 'down': # currently not used
         c_p['motor_movements'][1] = -300
 
-    # Update c_p['search_direction']for the 4 possible corners in the gridsearch
     if c_p['search_direction']== 'right' \
         and (c_p['motor_current_pos'][0] - c_p['motor_starting_pos'][0])>x_max:
         c_p['search_direction']=='up'
-        # y_start = c_p['motor_current_pos'][1]
 
     if c_p['search_direction']== 'up' and \
         (c_p['motor_current_pos'][1]-y_start)>delta_y:
