@@ -53,9 +53,11 @@ class TED4015():
         Sets the target temperature(setpoint temperature) of the instrument
         """
         # TODO are there any limits to te temperature?
-        temperature_command = 'SOUR:TEMP '+str(temperature)+'C'
-        return self.TED4015.write(temperature_command)
-
+        if 0 < temperature < 40:
+            temperature_command = 'SOUR:TEMP '+str(temperature)+'C'
+            return self.TED4015.write(temperature_command)
+        else:
+            print('Temperature not in OK range!')
     def query_output(self):
         """
         Checks if the output is on or off.

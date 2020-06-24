@@ -55,8 +55,8 @@ def get_default_c_p(recording_path=None):
         'framerate': 10,
         'recording': False,
         'tracking_on': False,
-        'setpoint_temperature': 24,
-        'current_temperature': 24,
+        'setpoint_temperature': 25,
+        'current_temperature': 25,
         'starting_temperature': 23.4,
         'temperature_controller_connected': False,
         'temperature_stable': False,
@@ -82,7 +82,7 @@ def get_default_c_p(recording_path=None):
         # motor is moved 1 mm in positive direction z_x_diff = (z1-z0)/(x1-x0) steps/mm
         # Sign ,+ or -,of this?
         'z_y_diff': 0,
-        'temperature_z_diff': 0, #-190,  # How much the objective need to be moved
+        'temperature_z_diff': -80, #-190,  # How much the objective need to be moved
         # in ticks when the objective is heated 1C. Needs to be calibrated manually.
 
         'slm_x_center': 700,#795, # needs to be recalibrated if camera is moved.
@@ -220,7 +220,12 @@ def start_threads(cam=True, motor_x=True, motor_y=True, motor_z=True, slm=True,
         print('Tracking thread started')
 
     if temp:
-        temperature_controller = TemperatureControllerTED4015.TED4015()
+
+        try:
+            temperature_controller = TemperatureControllerTED4015.TED4015()
+        except:
+            temperature_controller = None
+            print('problem connecting to temperature controller')
         temperature_thread = TemperatureThread(7,'Temperature_thread',temperature_controller=temperature_controller)
         temperature_thread.start()
         thread_list.append(temperature_thread)
@@ -268,8 +273,6 @@ class CreateSLMThread(threading.Thread):
         c_p['phasemask_updated'] = True
         SLM_loc_to_trap_loc(xm=c_p['xm'], ym=c_p['ym'])
 
-        #print(c_p['traps_absolute_pos'])
-        #print(c_p['traps_relative_pos'])
 
         c_p['traps_occupied'] =\
             [False for i in range(len(c_p['traps_absolute_pos'][0]))]
@@ -350,7 +353,10 @@ class TemperatureThread(threading.Thread):
                 # Turn on output and continuosly set and query the temperature.
                 self.temperature_controller.turn_on_output()
                 while c_p['continue_capture']:
-                    self.temperature_controller.set_setpoint_temperature(c_p['setpoint_temperature'])
+                    if 0 < c_p['setpoint_temperature'] < 40:
+                        self.temperature_controller.set_setpoint_temperature(c_p['setpoint_temperature'])
+                    else:
+                        print('Setpoint temperature NOK')
                     c_p['current_temperature'] =\
                         self.temperature_controller.measure_temperature()
                     self.temperature_history.append(
@@ -532,8 +538,8 @@ class TkinterDisplay:
         self.tracking_label.place(x=1220, y=930)
 
         position_text = 'x: ' +\
-            str(c_p['motor_current_pos'][0]) + ' y: ' \
-                + str(c_p['motor_current_pos'][1]) + 'z: '\
+            str(c_p['motor_current_pos'][0]) + 'mm.   y: ' \
+                + str(c_p['motor_current_pos'][1]) + 'mm   z: '\
                 + str(c_p['motor_current_pos'][2])
 
         self.position_label = Label(self.window, text=position_text)
@@ -570,8 +576,8 @@ class TkinterDisplay:
         self.temperature_label.config(text=temperature_text)
 
         position_text = 'x: '+str(c_p['motor_current_pos'][0])+\
-            ' y: '+str(c_p['motor_current_pos'][1])+\
-            ' z: '+str(c_p['motor_current_pos'][2])
+            'mm   y: '+str(c_p['motor_current_pos'][1])+\
+            'mm   z: '+str(c_p['motor_current_pos'][2])
         position_text += '\n Experiments run ' + str(c_p['experiment_progress'])
         position_text += ' out of ' + str(c_p['nbr_experiments'])
         position_text += '  ' + str(c_p['experiment_runtime']) + 's run out of ' + str(c_p['recording_duration'])
@@ -1059,7 +1065,8 @@ def update_c_p(update_dict):
     for key in update_dict:
         if key in requires_new_phasemask:
             c_p['new_phasemask'] = True
-
+    while c_p['new_phasemask']:
+        time.sleep(0.3)
 
 def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
     '''
@@ -1423,14 +1430,14 @@ image = cam.grab_image()
 thread_list = []
 
 # Define experiment to be run
-xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=3,nbr_columns=3, dx=15e-6,dy=15e-6, d0x=-30e-6, d0y=-50e-6)
-#.get_xm_ym_triangle_with_center(d=20e-6, d0x=-40e-6, d0y=-40e-6)
-xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=3,nbr_columns=3, dx=20e-6,dy=20e-6, d0x=-30e-6, d0y=-50e-6)
+xm1, ym1 = SLM.get_xm_ym_triangle_with_center(d=32e-6, d0x=-60e-6, d0y=-60e-6)
+xm2, ym2 = SLM.get_xm_ym_triangle_with_center(d=34e-6, d0x=-60e-6, d0y=-60e-6)
+#SLM.get_xm_ym_rect(nbr_rows=3,nbr_columns=3, dx=25e-6,dy=25e-6, d0x=-70e-6, d0y=-50e-6)
 
 experiment_schedule = [
-{'setpoint_temperature':24,'xm':xm1, 'ym':ym1, 'use_LGO':[False],
+{'setpoint_temperature':25,'xm':xm1, 'ym':ym1, 'use_LGO':[False],
 'LGO_order':-8, 'target_experiment_z':1500, 'recording_duration':4_000,'SLM_iterations':30},
-{'setpoint_temperature':24,'xm':xm2, 'ym':ym2, 'use_LGO':[False,],
+{'setpoint_temperature':25,'xm':xm2, 'ym':ym2, 'use_LGO':[False,],
 'LGO_order':-8, 'target_experiment_z':1500, 'recording_duration':4_000,'SLM_iterations':30}
 ]
 
