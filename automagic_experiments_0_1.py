@@ -60,7 +60,7 @@ def get_default_c_p(recording_path=None):
         'starting_temperature': 23.4,
         'temperature_controller_connected': False,
         'temperature_stable': False,
-        'search_direction': 'right',
+        'search_direction': 'up',
         'particle_centers': [[500], [500]],
         'target_particle_center': [500, 500],  # Position of the particle we
         # currently are trying to trap. Used to minimize changes in code when
@@ -82,6 +82,7 @@ def get_default_c_p(recording_path=None):
         # motor is moved 1 mm in positive direction z_x_diff = (z1-z0)/(x1-x0) steps/mm
         # Sign ,+ or -,of this?
         'z_y_diff': 0,
+        'x_start': 0,
         'temperature_z_diff': -80, #-190,  # How much the objective need to be moved
         # in ticks when the objective is heated 1C. Needs to be calibrated manually.
 
@@ -93,7 +94,7 @@ def get_default_c_p(recording_path=None):
         # to compensate for the changes in temperature.Measured in
         # [ticks/deg C]
         'return_z_home': False,
-        'particle_threshold': 120,
+        'particle_threshold': 100,
         'particle_size_threshold': 200,  # Parcticle detection threshold
         'bright_particle': True,  # Is particle brighter than the background?
         'xy_movement_limit': 1200,
@@ -1383,8 +1384,8 @@ def search_for_particles():
     Function for searching after particles. Threats the sample as a grid and
     systmatically searches it
     '''
-    x_max = 3 # [mm]
-    delta_y = 0.05 # [mm]
+    x_max = 0.005 # [mm]
+    delta_y = 3 # [mm]
     print('searching for particles in ' + c_p['search_direction'] + ' direction.')
     # Make movement
     if c_p['search_direction']== 'right':
@@ -1399,19 +1400,24 @@ def search_for_particles():
     elif c_p['search_direction']== 'down': # currently not used
         c_p['motor_movements'][1] = -300
 
-    if c_p['search_direction']== 'right' \
-        and (c_p['motor_current_pos'][0] - c_p['motor_starting_pos'][0])>x_max:
-        c_p['search_direction']=='up'
+    #if c_p['search_direction']== 'right' \
+    #    and (c_p['motor_current_pos'][0] - c_p['motor_starting_pos'][0])>x_max:
+    #    c_p['search_direction']=='up'
 
     if c_p['search_direction']== 'up' and \
-        (c_p['motor_current_pos'][1]-y_start)>delta_y:
-        c_p['search_direction']= 'left'
-
-    if c_p['search_direction']== 'left' and \
-        c_p['motor_current_pos'][0]<=c_p['motor_starting_pos'][0]:
-
+        (c_p['motor_current_pos'][1]-c_p['motor_starting_pos'][1])>delta_y:
         c_p['search_direction']= 'right'
+        c_p['x_start'] = c_p['motor_current_pos'][0]
 
+    if c_p['search_direction']== 'right' and \
+        (c_p['motor_current_pos'][0]-c_p['x_start'])>c_p['motor_starting_pos'][0]:
+        if c_p['motor_current_pos'][1] - c_p['motor_starting_pos'][1]>delta_y/2:
+            c_p['search_direction'] = 'down'
+        else:
+            c_p['search_direction'] = 'up'
+    if c_p['search_direction']== 'down' \
+        and (c_p['motor_current_pos'][1] - c_p['motor_starting_pos'][1])<0:
+        c_p['search_direction']=='right'
 
 def update_traps_relative_pos():
     global c_p
@@ -1480,13 +1486,14 @@ image = cam.grab_image()
 thread_list = []
 
 # Define experiment to be run
-xm1, ym1 = SLM.get_xm_ym_triangle_with_center(d=32e-6, d0x=-60e-6, d0y=-60e-6)
-xm2, ym2 = SLM.get_xm_ym_triangle_with_center(d=34e-6, d0x=-60e-6, d0y=-60e-6)
-#SLM.get_xm_ym_rect(nbr_rows=3,nbr_columns=3, dx=25e-6,dy=25e-6, d0x=-70e-6, d0y=-50e-6)
+xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=1,nbr_columns=5, dx=13e-6,dy=13e-6, d0x=-100e-6, d0y=-100e-6)
+#get_xm_ym_triangle_with_center(d=32e-6, d0x=-60e-6, d0y=-60e-6)
+xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=1,nbr_columns=5, dx=15e-6,dy=15e-6, d0x=-100e-6, d0y=-100e-6)
+xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=1,nbr_columns=5, dx=20e-6,dy=20e-6, d0x=-100e-6, d0y=-100e-6)
 
 experiment_schedule = [
 {'setpoint_temperature':25,'xm':xm1, 'ym':ym1, 'use_LGO':[False],
-'LGO_order':-8, 'target_experiment_z':1500, 'recording_duration':4_000,'SLM_iterations':30},
+'LGO_order':-8, 'target_experiment_z':500, 'recording_duration':10_000,'SLM_iterations':30},
 {'setpoint_temperature':25,'xm':xm2, 'ym':ym2, 'use_LGO':[False,],
 'LGO_order':-8, 'target_experiment_z':1500, 'recording_duration':4_000,'SLM_iterations':30}
 ]
