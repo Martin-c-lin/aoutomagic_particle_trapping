@@ -81,7 +81,7 @@ def get_default_c_p(recording_path=None):
         # calculated as the change needed in z (measured in steps) when the
         # motor is moved 1 mm in positive direction z_x_diff = (z1-z0)/(x1-x0) steps/mm
         # Sign ,+ or -,of this?
-        'z_y_diff': 0,
+        'z_y_diff': 50, # approximate, has not measured this
         'x_start': 0,
         'temperature_z_diff': -80, #-190,  # How much the objective need to be moved
         # in ticks when the objective is heated 1C. Needs to be calibrated manually.
@@ -89,7 +89,7 @@ def get_default_c_p(recording_path=None):
         'slm_x_center': 700,#795, # needs to be recalibrated if camera is moved.
         # This is the position of the 0th order of the SLM (ie where the trap)
         # with xm=ym=0 is located in camera coordinates
-        'slm_y_center': 890,#840,
+        'slm_y_center': 900,#seem to be a bit off
         'slm_to_pixel': 4550000.0,
         # to compensate for the changes in temperature.Measured in
         # [ticks/deg C]
@@ -331,6 +331,12 @@ class TemperatureThread(threading.Thread):
             self.max_diff = max_diff
             if temperature_controller is not None:
                 self.temperature_controller = temperature_controller
+                c_p['starting_temperature'] =\
+                    self.temperature_controller.measure_temperature()
+                c_p['current_temperature'] =\
+                    c_p['starting_temperature']
+                c_p['setpoint_temperature'] = c_p['starting_temperature']
+                c_p['temperature_controller_connected'] = True
             else:
                 try:
                     self.temperature_controller =\
@@ -339,6 +345,7 @@ class TemperatureThread(threading.Thread):
                         self.temperature_controller.measure_temperature()
                     c_p['current_temperature'] =\
                         c_p['starting_temperature']
+                    c_p['setpoint_temperature'] = c_p['starting_temperature']
                     c_p['temperature_controller_connected'] = True
                 except:
                     # Handling the case of not having a temperature controller
@@ -827,9 +834,9 @@ class CameraThread(threading.Thread):
         fourcc = VideoWriter_fourcc(*'MJPG')
         image_width = c_p['AOI'][1]-c_p['AOI'][0]
         image_height = c_p['AOI'][3]-c_p['AOI'][2]
-        video_name = c_p['recording_path'] + '/moive-' + \
+        video_name = c_p['recording_path'] + '/video-' + \
             str(now.hour) + '-' + str(now.minute) + '-' + str(now.second)+'.avi'
-        experiment_info_name =c_p['recording_path'] + '/moive-' + \
+        experiment_info_name =c_p['recording_path'] + '/video-' + \
             str(now.hour) + '-' + str(now.minute) + '-' + str(now.second) + 'info'
 
         video = VideoWriter(video_name, fourcc,
@@ -1012,7 +1019,7 @@ class ExperimentControlThread(threading.Thread):
             else:
                 break
         zoom_out()
-        #c_p['recording'] = False
+        c_p['recording'] = False
         if time.time() >= start + duration:
             return 0
         return start + duration - time.time()
@@ -1486,16 +1493,18 @@ image = cam.grab_image()
 thread_list = []
 
 # Define experiment to be run
-xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=1,nbr_columns=5, dx=13e-6,dy=13e-6, d0x=-100e-6, d0y=-100e-6)
+xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=1,nbr_columns=2, dx=100e-6,dy=13e-6, d0x=-100e-6, d0y=-100e-6)
 #get_xm_ym_triangle_with_center(d=32e-6, d0x=-60e-6, d0y=-60e-6)
-xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=1,nbr_columns=5, dx=15e-6,dy=15e-6, d0x=-100e-6, d0y=-100e-6)
-xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=1,nbr_columns=5, dx=20e-6,dy=20e-6, d0x=-100e-6, d0y=-100e-6)
+xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=1,nbr_columns=2, dx=90e-6,dy=15e-6, d0x=-100e-6, d0y=-100e-6)
+xm3, ym3 = SLM.get_xm_ym_rect(nbr_rows=1,nbr_columns=2, dx=50e-6,dy=20e-6, d0x=-100e-6, d0y=-100e-6)
 
 experiment_schedule = [
-{'setpoint_temperature':25,'xm':xm1, 'ym':ym1, 'use_LGO':[False],
-'LGO_order':-8, 'target_experiment_z':500, 'recording_duration':10_000,'SLM_iterations':30},
-{'setpoint_temperature':25,'xm':xm2, 'ym':ym2, 'use_LGO':[False,],
-'LGO_order':-8, 'target_experiment_z':1500, 'recording_duration':4_000,'SLM_iterations':30}
+{'xm':xm1, 'ym':ym1, 'use_LGO':[False],
+'LGO_order':-8, 'target_experiment_z':1000, 'recording_duration':10_000,'SLM_iterations':1}, # obs fewer iterations due to GSW problem
+{'xm':xm2, 'ym':ym2, 'use_LGO':[False,],
+'LGO_order':-8, 'target_experiment_z':1000, 'recording_duration':10_000,'SLM_iterations':1},
+{'xm':xm3, 'ym':ym3, 'use_LGO':[False,],
+'LGO_order':-8, 'target_experiment_z':1000, 'recording_duration':10_000,'SLM_iterations':1}
 ]
 
 # {'xm':[-30e-6, -45e-6, -60e-6, -30e-6, -45e-6, -60e-6, -30e-6, -45e-6, -60e-6],

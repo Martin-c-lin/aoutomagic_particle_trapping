@@ -255,8 +255,8 @@ class TkinterDisplay:
             else:
                 print('Value out of bounds')
         set_iterations = lambda : update_from_entry(iterations_entry, type='int', key='SLM_iterations', bounds=[0,1000])
-        set_dx = lambda : update_from_entry(dx_entry, type='float', key='dx', bounds=[0,100],scale=1e-6)
-        set_dy = lambda : update_from_entry(dy_entry, type='float', key='dy', bounds=[0,100],scale=1e-6)
+        set_dx = lambda : update_from_entry(dx_entry, type='float', key='dx', bounds=[0,200],scale=1e-6)
+        set_dy = lambda : update_from_entry(dy_entry, type='float', key='dy', bounds=[0,200],scale=1e-6)
 
         set_SLM_rows = lambda : update_from_entry(nbr_trap_rows_entry, type='int', key='nbr_SLM_rows', bounds=[0,1000])
         set_SLM_columns = lambda : update_from_entry(nbr_trap_columns_entry, type='int', key='nbr_SLM_columns',bounds=[0,1000])
