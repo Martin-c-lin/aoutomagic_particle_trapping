@@ -60,6 +60,7 @@ def get_default_c_p(recording_path=None):
         'starting_temperature': 23.4,
         'temperature_controller_connected': False,
         'temperature_stable': False,
+        'temperature_output_on':False,
         'search_direction': 'up',
         'particle_centers': [[500], [500]],
         'target_particle_center': [500, 500],  # Position of the particle we
@@ -125,7 +126,6 @@ def get_default_c_p(recording_path=None):
     c_p['xm'], c_p['ym'] =  SLM.get_xm_ym_rect(
             nbr_rows=2, nbr_columns=2,
             d0x=-40e-6, d0y=-40e-6)
-    #SLM_loc_to_trap_loc(c_p['xm'],c_p['ym'],c_p=c_p)
 
     # Cannot call SLM_loc_to_trap_loc until c_p has been created so we manually
     # converto from xm,ym to trap locs here
@@ -358,7 +358,8 @@ class TemperatureThread(threading.Thread):
             global c_p
             if self.temperature_controller is not None:
                 # Turn on output and continuosly set and query the temperature.
-                self.temperature_controller.turn_on_output()
+                if c_p['temperature_output_on']:
+                    self.temperature_controller.turn_on_output()
                 while c_p['continue_capture']:
                     if 0 < c_p['setpoint_temperature'] < 40:
                         self.temperature_controller.set_setpoint_temperature(c_p['setpoint_temperature'])
@@ -369,16 +370,23 @@ class TemperatureThread(threading.Thread):
                     self.temperature_history.append(
                         c_p['current_temperature'])
 
+                    # Update and check history
                     if len(self.temperature_history)>self.temp_hist_length:
                         self.temperature_history.pop()
                     history = [T-c_p['setpoint_temperature'] for T in self.temperature_history]
                     if max(np.abs(history))<self.max_diff:
-
                         c_p['temperature_stable'] = True
 
                     else:
                         c_p['temperature_stable'] = False
 
+                    # Check output and if it shoould be on
+                    if self.temperature_controller.query_output()==0 and \
+                        c_p['temperature_output_on']:
+                        self.temperature_controller.turn_on_output()
+                    elif self.temperature_controller.query_output()==1 and not\
+                        c_p['temperature_output_on']:
+                        self.temperature_controller.turn_off_output()
                     time.sleep(1) # We do not need to update the temperature very often
                 self.temperature_controller.turn_off_output()
 
@@ -547,9 +555,12 @@ class TkinterDisplay:
             top, text='Set setpoint temperature', command=set_temperature)
         zoom_in_button = tkinter.Button(top, text='Zoom in', command=zoom_in)
         zoom_out_button = tkinter.Button(top, text='Zoom out', command=zoom_out)
-
+        temperature_output_button = tkinter.Button(top,
+            text='toggle temperature output', command=toggle_temperature_output)
         x_position = 1220
+        x_position_2 = 1420
         y_position = get_y_separation()
+        y_position_2 = get_y_separation()
         exit_button.place(x=x_position, y=y_position.__next__())
         up_button.place(x=x_position, y=y_position.__next__())
         down_button.place(x=x_position, y=y_position.__next__())
@@ -567,6 +578,9 @@ class TkinterDisplay:
         temperature_button.place(x=x_position, y=y_position.__next__())
         zoom_in_button.place(x=x_position, y=y_position.__next__())
         zoom_out_button.place(x=x_position, y=y_position.__next__())
+
+        # Second column
+        temperature_output_button.place(x=x_position_2, y=y_position_2.__next__())
 
     def create_SLM_window(self, _class):
         try:
@@ -632,11 +646,20 @@ class TkinterDisplay:
             self.tracking_label.config(text='particle tracking is on',bg='green')
         else:
             self.tracking_label.config(text='particle tracking is off', bg='red')
-        temperature_text = 'Current objective temperature is: '+str(c_p['current_temperature'])+' C'+'\n setpoint temperature is: '+str(c_p['setpoint_temperature'])+' C'
-        if c_p['temperature_stable']:
-            temperature_text += '\nTemperature is stable. '
+
+        if c_p['temperature_controller_connected']:
+            temperature_text = 'Current objective temperature is: '+str(c_p['current_temperature'])+' C'+'\n setpoint temperature is: '+str(c_p['setpoint_temperature'])+' C'
+            if c_p['temperature_stable']:
+                temperature_text += '\nTemperature is stable. '
+            else:
+                temperature_text += '\nTemperature is not stable. '
+            if c_p['temperature_output_on']:
+                temperature_text += '\n Temperature controller output is on.'
+            else:
+                temperature_text += '\n Temperature controller output is off.'
         else:
-            temperature_text += '\nTemperature is not stable. '
+            temperature_text = 'Temperature controller is not connected.'
+
         self.temperature_label.config(text=temperature_text)
 
         position_text = 'x: '+str(c_p['motor_current_pos'][0])+\
@@ -822,6 +845,7 @@ class CameraThread(threading.Thread):
        'LGO_order':c_p['LGO_order'],
        'setpoint_temperature':c_p['setpoint_temperature'],
        'target_experiment_z':c_p['target_experiment_z'],
+       'temperature_output_on':c_p['temperature_output_on'],
        }
        return parameter_dict
 
@@ -1102,7 +1126,8 @@ def update_c_p(update_dict):
     # TODO Add possibility to require temperature to be stable
 
     ok_parameters = ['use_LGO', 'LGO_order', 'xm', 'ym', 'setpoint_temperature',
-    'recording_duration', 'target_experiment_z', 'SLM_iterations']
+    'recording_duration', 'target_experiment_z', 'SLM_iterations',
+    'temperature_output_on']
 
     requires_new_phasemask = ['use_LGO', 'LGO_order', 'xm', 'ym', 'SLM_iterations']
 
@@ -1335,6 +1360,14 @@ def stop_record():
     '''
     c_p['recording']= False
     print('Recording is off')
+
+
+def toggle_temperature_output():
+    '''
+    Function for toggling temperature output on/off.
+    '''
+    c_p['temperature_output_on'] = not c_p['temperature_output_on']
+    print("c_p['temperature_output_on'] set to",c_p['temperature_output_on'])
 
 
 def toggle_bright_particle():
