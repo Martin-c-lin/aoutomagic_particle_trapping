@@ -121,6 +121,41 @@ def get_default_xm_ym():
         ym[i*fac+2] = d0y+d/2*(i-1)
 
     return xm,ym
+def hexagonal(d0x, d0y, d):
+    '''
+    Function which generates a hexagonal pattern with a particle in the center.
+    The particle-particle distance is d and the center particle is located at
+    (d0x,d0y).
+    '''
+    from math import pi
+    from numpy import cos, sin
+    xm = np.zeros(7)
+    ym = np.zeros(7)
+    xm[0] = d0x
+    ym[0] = d0y
+
+    for i in range(6):
+        xm[i+1] = d0x + cos(pi*i/3)
+        ym[i+1] = d0y + sin(pi*i/3)
+    return xm, ym
+def hexagonal_lattice(nbr_rows, nbr_columns, d0x, d0y, d):
+    '''
+    Function which calculates the positions in a hexagonal
+    lattice with lower left corner in (d0x,d0y) and
+    lattice constant d (particle-particle distance d).
+    '''
+    from numpy import mod, sqrt
+    nbr_particles = nbr_rows * nbr_columns
+    xm = np.zeros(nbr_particles)
+    ym = np.zeros(nbr_particles)
+    for r in range(nbr_rows):
+        for c in range(nbr_columns):
+            ym[r*nbr_columns+c] = d0y + (d * r * sqrt(3) / 2)
+            if mod(r,2) == 1:
+                xm[r*nbr_columns+c] = d0x + d * c + d/2
+            else:
+                xm[r*nbr_columns+c] = d0x + d * c
+    return xm, ym
 def get_xm_ym_rect(nbr_rows,nbr_columns, dx=30e-6,dy=30e-6, d0x=-115e-6, d0y=-115e-6):
     '''
     Generates xm,ym in a rectangular grid with a particle-particle distance of d.
