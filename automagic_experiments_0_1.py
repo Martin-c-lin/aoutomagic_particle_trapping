@@ -7,7 +7,7 @@ import find_particle_threshold as fpt
 from instrumental import u
 import matplotlib.pyplot as plt
 import numpy as np
-import threading, time, cv2, queue, copy, sys, tkinter, os
+import threading, time, cv2, queue, copy, sys, tkinter, os, pickle
 from tkinter import messagebox
 from functools import partial
 import datetime
@@ -854,6 +854,7 @@ class CameraThread(threading.Thread):
         Funciton for creating a VideoWriter.
         Will also save the relevant parameters of the experiments.
         '''
+        global c_p
         now = datetime.datetime.now()
         fourcc = VideoWriter_fourcc(*'MJPG')
         image_width = c_p['AOI'][1]-c_p['AOI'][0]
@@ -861,14 +862,13 @@ class CameraThread(threading.Thread):
         video_name = c_p['recording_path'] + '/video-' + \
             str(now.hour) + '-' + str(now.minute) + '-' + str(now.second)+'.avi'
         experiment_info_name =c_p['recording_path'] + '/video-' + \
-            str(now.hour) + '-' + str(now.minute) + '-' + str(now.second) + 'info'
+            str(now.hour) + '-' + str(now.minute) + '-' + str(now.second) + '_info'
 
         video = VideoWriter(video_name, fourcc,
             float(c_p['framerate']),
             (image_width, image_height), isColor=False)
-        exp_params = self.get_important_parameters()
-        np.save(experiment_info_name, exp_params,  allow_pickle=True)
-        return video, video_name
+        exp_info_params = self.get_important_parameters()
+        return video, experiment_info_name, exp_info_params
 
    def run(self):
 
@@ -889,7 +889,7 @@ class CameraThread(threading.Thread):
 
            # Grab one example image
            global image
-           image = cam.grab_image(n_frames=1)# This gave lots of errors for unkown reason
+           image = cam.grab_image(n_frames=1)
            image_count = 0
            # Start livefeed from the camera
 
@@ -901,7 +901,7 @@ class CameraThread(threading.Thread):
 
            # Create an array to store the images which have been captured in
            if not video_created:
-               video, video_name = self.create_video_writer()
+               video, experiment_info_name, exp_info_params = self.create_video_writer()
                video_created = True
            # Start continously capturin images now that the camera parameters have been set
            while c_p['continue_capture']\
@@ -925,9 +925,11 @@ class CameraThread(threading.Thread):
            print('Capture sequence finished', image_count,
                 'Images captured in ', end-start, 'seconds. \n FPS is ',
                 fps)
-           fps_file = video_name[:-4] + 'fps'
-           np.save(fps_file, fps, allow_pickle=True)
-
+           # Save the experiment data in a pickled dict.
+           outfile = open(experiment_info_name, 'wb')
+           exp_info_params['fps'] = fps
+           pickle.dump(exp_info_params, outfile)
+           outfile.close()
 
 class ExperimentControlThread(threading.Thread):
    '''
