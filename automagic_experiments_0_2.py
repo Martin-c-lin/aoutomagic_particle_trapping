@@ -14,6 +14,7 @@ import datetime
 from cv2 import VideoWriter, VideoWriter_fourcc
 from tkinter import *
 import PIL.Image, PIL.ImageTk
+from pypylon import pylon
 
 def get_default_c_p(recording_path=None):
     '''
@@ -44,7 +45,7 @@ def get_default_c_p(recording_path=None):
         # not
         'recording': False,  # True if recording is on
         'half_image_width': 500,  # TODO remove this parameter,
-        'AOI': [0, 1200, 0, 1000],
+        'AOI': [0, 640, 0, 480], # Default for basler camera [0,1200,0,1000] TC
         'new_AOI_camera': False,
         'new_AOI_display': False,
         'new_phasemask': False,
@@ -103,7 +104,7 @@ def get_default_c_p(recording_path=None):
 
         'use_LGO':[False],
         'LGO_order': -8,
-        'exposure_time':2,
+        'exposure_time':200, # ExposureTime in micro s
         'SLM_iterations':5,
         'trap_separation_x':20e-6,
         'trap_separation_y':20e-6,
@@ -112,6 +113,8 @@ def get_default_c_p(recording_path=None):
         'experiment_schedule':[20e-6, 25],
         'experiment_progress':0, # number of experiments run
         'experiment_runtime':0, # How many seconds have the experiment been running
+
+        'camera_model':'basler',
     }
 
     # Set traps positions
@@ -159,8 +162,8 @@ def terminate_threads():
         del thread
 
 
-def start_threads(cam=True, motor_x=True, motor_y=True, motor_z=True, slm=True,
-        tracking=True, isaac=False, temp=True, experiment_schedule=None):
+def start_threads(cam=True, motor_x=True, motor_y=True, motor_z=True, slm=True,tracking=True, isaac=False, temp=True, experiment_schedule=None):
+
     """
     Function for starting all the threads, can only be called once
     """
@@ -835,6 +838,7 @@ class CameraThread(threading.Thread):
       threading.Thread.__init__(self)
       self.threadID = threadID
       self.name = name
+      # TODO, make the camera a part of the camera thread
       self.setDaemon(True)
    def get_important_parameters(self):
        global c_p
@@ -870,66 +874,162 @@ class CameraThread(threading.Thread):
         exp_info_params = self.get_important_parameters()
         return video, experiment_info_name, exp_info_params
 
-   def run(self):
 
-       print('Initiating threaded capture sequence')
+   def thorlabs_capture(self):
+      number_images_saved = 0 # counts
+      video_created = False
+      global c_p
+      global cam
 
-       number_images_saved = 0 # counts
-       video_created = False
-       # Also need to record the framerate etc
+      while c_p['continue_capture']:
+          # Set defaults for camera, aknowledge that this has been done
+          cam.set_defaults(left=c_p['AOI'][0],
+              right=c_p['AOI'][1],
+              top=c_p['AOI'][2],
+              bot=c_p['AOI'][3])
+          c_p['new_AOI_camera'] = False
+          # Grab one example image
+          global image
+          image = cam.grab_image(n_frames=1)
+          image_count = 0
+          # Start livefeed from the camera
+
+          # Setting  maximum framerate. Will cap it to make it stable
+          cam.start_live_video(
+               framerate=str(c_p['framerate']) + 'hertz' )
+
+          start = time.time()
+
+          # Create an array to store the images which have been captured in
+          if not video_created:
+              video, experiment_info_name, exp_info_params = self.create_video_writer()
+              video_created = True
+          # Start continously capturin images now that the camera parameters have been set
+          while c_p['continue_capture']\
+               and not c_p['new_AOI_camera']:
+              cam.wait_for_frame(timeout=None)
+              if c_p['recording']:
+                  video.write(image)
+              # Capture an image and update the image count
+              image_count = image_count+1
+              image[:][:][:] = cam.latest_frame()
+
+
+          video.release()
+
+          del video
+          video_created = False
+          # Close the livefeed and calculate the fps of the captures
+          end = time.time()
+          cam.stop_live_video()
+          fps = image_count/(end-start)
+          print('Capture sequence finished', image_count,
+               'Images captured in ', end-start, 'seconds. \n FPS is ',
+               fps)
+          # Save the experiment data in a pickled dict.
+          outfile = open(experiment_info_name, 'wb')
+          exp_info_params['fps'] = fps
+          pickle.dump(exp_info_params, outfile)
+          outfile.close()
+
+   def set_basler_AOI(self,cam):
+       '''
+       Function for setting AOI of basler camera to c_p['AOI']
+       '''
        global c_p
-       global cam
-       while c_p['continue_capture']:
-           # Set defaults for camera, aknowledge that this has been done
-           cam.set_defaults(left=c_p['AOI'][0],
-               right=c_p['AOI'][1],
-               top=c_p['AOI'][2],
-               bot=c_p['AOI'][3])
-           c_p['new_AOI_camera'] = False
 
-           # Grab one example image
-           global image
-           image = cam.grab_image(n_frames=1)
-           image_count = 0
-           # Start livefeed from the camera
+       try:
+           c_p['AOI'][1] -= np.mod(c_p['AOI'][1]-c_p['AOI'][0],16)
+           c_p['AOI'][3] -= np.mod(c_p['AOI'][3]-c_p['AOI'][2],16)
 
-           # Setting  maximum framerate. Will cap it to make it stable
-           cam.start_live_video(
-                framerate=str(c_p['framerate']) + 'hertz' )
+            # The order in which you set the size and offset parameters matter.
+            # If you ever get the offset + width greater than max width the
+            # camera won't accept your valuse. Thereof the if-else-statements
+            # below. Conditions might need to be changed if the usecase of this
+            #  funciton change
 
-           start = time.time()
+           if int(c_p['AOI'][0])>0: 
+               cam.Width = int(c_p['AOI'][1] - c_p['AOI'][0])
+               cam.OffsetX = int(c_p['AOI'][0])
+           else:
+               cam.OffsetX = int(c_p['AOI'][0])
+               cam.Width = int(c_p['AOI'][1] - c_p['AOI'][0])
+           if int(c_p['AOI'][2])>0:
+                cam.Height = int(c_p['AOI'][3] - c_p['AOI'][2])
+                cam.OffsetY = int(c_p['AOI'][2])
+           else:
+                cam.OffsetY = int(c_p['AOI'][2])
+                cam.Height = int(c_p['AOI'][3] - c_p['AOI'][2])
 
-           # Create an array to store the images which have been captured in
-           if not video_created:
-               video, experiment_info_name, exp_info_params = self.create_video_writer()
-               video_created = True
-           # Start continously capturin images now that the camera parameters have been set
-           while c_p['continue_capture']\
-                and not c_p['new_AOI_camera']:
-               cam.wait_for_frame(timeout=None)
-               if c_p['recording']:
-                   video.write(image)
-               # Capture an image and update the image count
-               image_count = image_count+1
-               image[:][:][:] = cam.latest_frame()
+       except Exception as e:
+           print('AOI not accepted',c_p['AOI'])
+           print(e)
+
+   def basler_capture(self):
+      number_images_saved = 0 # counts
+      video_created = False
+      global c_p
+      global cam
+      img = pylon.PylonImage()
+
+      while c_p['continue_capture']:
+          # Set defaults for camera, aknowledge that this has been done
+
+          self.set_basler_AOI(cam)
+          c_p['new_AOI_camera'] = False
+          try:
+              cam.ExposureTime = c_p['exposure_time']
+          except:
+              print('Exposure time not accepted by camera')
+          # Grab one example image
+          image_count = 0
+
+          global image
+          cam.StartGrabbing()
+
+          start = time.time()
+
+          # Create an array to store the images which have been captured in
+          if not video_created:
+              video, experiment_info_name, exp_info_params = self.create_video_writer()
+              video_created = True
+          # Start continously capturin images now that the camera parameters have been set
+          while c_p['continue_capture']\
+               and not c_p['new_AOI_camera']:
+
+               with cam.RetrieveResult(2000) as result:
+                  img.AttachGrabResultBuffer(result)
+                  image = img.GetArray()
+                  img.Release()
+                  if c_p['recording']:
+                      video.write(image)
+                  # Capture an image and update the image count
+                  image_count = image_count+1
+
+          video.release()
+          cam.StopGrabbing()
+          del video
+          video_created = False
+          # Close the livefeed and calculate the fps of the captures
+          end = time.time()
 
 
-           video.release()
+          # Calculate FPS
+          fps = image_count/(end-start)
+          print('Capture sequence finished', image_count,
+               'Images captured in ', end-start, 'seconds. \n FPS is ',
+               fps)
+          # Save the experiment data in a pickled dict.
+          outfile = open(experiment_info_name, 'wb')
+          exp_info_params['fps'] = fps
+          pickle.dump(exp_info_params, outfile)
+          outfile.close()
 
-           del video
-           video_created = False
-           # Close the livefeed and calculate the fps of the captures
-           end = time.time()
-           cam.stop_live_video()
-           fps = image_count/(end-start)
-           print('Capture sequence finished', image_count,
-                'Images captured in ', end-start, 'seconds. \n FPS is ',
-                fps)
-           # Save the experiment data in a pickled dict.
-           outfile = open(experiment_info_name, 'wb')
-           exp_info_params['fps'] = fps
-           pickle.dump(exp_info_params, outfile)
-           outfile.close()
+   def run(self):
+       if c_p['camera_model'] == 'ThorlabsCam':
+           self.thorlabs_capture()
+       elif c_p['camera_model'] == 'basler':
+           self.basler_capture()
 
 
 class ExperimentControlThread(threading.Thread):
@@ -1171,19 +1271,29 @@ def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
     c_p['motor_locks'][0].acquire()
     c_p['motor_locks'][1].acquire()
     # If exact values have been provided for all the corners change AOI
-    if left is not None and right is not None and up is not None and down is not None:
-        if 0<=left<=1279 and left<=right<=1280 and 0<=up<=1079 and up<=down<=1080:
-            c_p['AOI'][0] = left
-            c_p['AOI'][1] = right
-            c_p['AOI'][2] = up
-            c_p['AOI'][3] = down
-        else:
-            print("Trying to set invalid area")
+    if c_p['camera_model'] == 'ThorlabsCam':
+        if left is not None and right is not None and up is not None and down is not None:
+            if 0<=left<=1279 and left<=right<=1280 and 0<=up<=1079 and up<=down<=1080:
+                c_p['AOI'][0] = left
+                c_p['AOI'][1] = right
+                c_p['AOI'][2] = up
+                c_p['AOI'][3] = down
+            else:
+                print("Trying to set invalid area")
     else:
-        c_p['AOI'] = [c_p['traps_relative_pos'][0]-half_image_width,
-            c_p['traps_relative_pos'][0]+half_image_width,
-            c_p['traps_relative_pos'][1]-half_image_width,
-            c_p['traps_relative_pos'][1]+half_image_width]
+        if left is not None and right is not None and up is not None and down is not None:
+            if 0<=left<=639 and left<=right<=640 and 0<=up<=479 and up<=down<=480:
+                c_p['AOI'][0] = left
+                c_p['AOI'][1] = right
+                c_p['AOI'][2] = up
+                c_p['AOI'][3] = down
+            else:
+                print("Trying to set invalid area")
+    # else:
+    #     c_p['AOI'] = [c_p['traps_relative_pos'][0]-half_image_width,
+    #         c_p['traps_relative_pos'][0]+half_image_width,
+    #         c_p['traps_relative_pos'][1]-half_image_width,
+    #         c_p['traps_relative_pos'][1]+half_image_width]
 
     print('Setting AOI to ',c_p['AOI'])
 
@@ -1403,24 +1513,35 @@ def focus_down():
 def zoom_in(margin=60):
     # Helper function for zoom button.
     # automagically zoom in on our traps
-
-    left = max(min(c_p['traps_absolute_pos'][0]) - margin, 0)
-    left = int(left // 20 * 20)
-    right = min(max(c_p['traps_absolute_pos'][0]) + margin, 1200)
-    right = int(right // 20 * 20)
-    up = max(min(c_p['traps_absolute_pos'][1]) - margin, 0)
-    up = int(up // 20 * 20)
-    down = min(max(c_p['traps_absolute_pos'][1]) + margin, 1000)
-    down = int(down // 20 * 20)
+    if c_p['camera_model'] == 'ThorlabsCam':
+        left = max(min(c_p['traps_absolute_pos'][0]) - margin, 0)
+        left = int(left // 20 * 20)
+        right = min(max(c_p['traps_absolute_pos'][0]) + margin, 1200)
+        right = int(right // 20 * 20)
+        up = max(min(c_p['traps_absolute_pos'][1]) - margin, 0)
+        up = int(up // 20 * 20)
+        down = min(max(c_p['traps_absolute_pos'][1]) + margin, 1000)
+        down = int(down // 20 * 20)
+    else:
+        left = max(min(c_p['traps_absolute_pos'][0]) - margin, 0)
+        left = int(left // 16 * 16)
+        right = min(max(c_p['traps_absolute_pos'][0]) + margin, 640)
+        right = int(right // 16 * 16)
+        up = max(min(c_p['traps_absolute_pos'][1]) - margin, 0)
+        up = int(up // 16 * 16)
+        down = min(max(c_p['traps_absolute_pos'][1]) + margin, 480)
+        down = int(down // 16 * 16)
 
     c_p['framerate'] = 300  # Note calculated framerate is automagically saved.
     set_AOI(left=left, right=right, up=up, down=down)
 
 
 def zoom_out():
-    set_AOI(left=0, right=1200, up=0, down=1000)
-    c_p['framerate'] = 10
-
+    if c_p['camera_model'] == 'ThorlabsCam':
+        set_AOI(left=0, right=1200, up=0, down=1000)
+        c_p['framerate'] = 10
+    else:
+        set_AOI(left=0, right=640, up=0, down=480)
 
 def search_for_particles():
     '''
@@ -1524,11 +1645,20 @@ def move_particles_slowly(last_d=30e-6):
 ############### Main script starts here ####################################
 c_p = get_default_c_p()
 # Create camera and set defaults
-cam = TC.get_camera()
-cam.set_defaults(left=c_p['AOI'][0], right=c_p['AOI'][1], top=c_p['AOI'][2], bot=c_p['AOI'][3], n_frames=1)
-exposure_time = TC.find_exposure_time(cam, targetIntensity=70) # automagically finds a decent exposure time
-print('Exposure time = ', exposure_time)
-image = cam.grab_image()
+
+if c_p['camera_model'] == 'ThorlabsCam':
+    # Get a thorlabs camera
+    cam = TC.get_camera()
+    cam.set_defaults(left=c_p['AOI'][0], right=c_p['AOI'][1], top=c_p['AOI'][2], bot=c_p['AOI'][3], n_frames=1)
+    exposure_time = TC.find_exposure_time(cam, targetIntensity=70) # automagically finds a decent exposure time
+    print('Exposure time = ', exposure_time)
+    image = cam.grab_image()
+else:
+    # Get a basler camera
+    tlf = pylon.TlFactory.GetInstance()
+    cam = pylon.InstantCamera(tlf.CreateFirstDevice())
+    cam.Open()
+    image = np.zeros((640,480,1))
 
 # Create a empty list to put the threads in
 thread_list = []
@@ -1567,6 +1697,9 @@ c_p['motor_running'] = False
 
 # Shut down camera and motors safely
 terminate_threads()
-cam.close()
+if c_p['camera_model'] == 'basler':
+    cam.Close()
+else:
+    cam.close()
 print(thread_list)
 sys.exit()

@@ -8,9 +8,8 @@ from math import atan2
 # datatypes to improve performance
 # See if smaller datatypes and upscaling can be used to improve performance
 
-# random mask encoding algorithm  (RM)
 
-def atan2_vec_2d(Y,X):
+def atan2_vec_2d(Y, X):
     '''
     Function for calculating atan2 of 2 2d arrays of coordinate positions(X,Y)
 
@@ -27,19 +26,19 @@ def atan2_vec_2d(Y,X):
     '''
     shape = np.shape(X)
 
-    if np.shape(X)==np.shape(Y):
+    if np.shape(X) == np.shape(Y):
 
-        Y = np.reshape(Y,shape[0]*shape[1])
-        X = np.reshape(X,shape[0]*shape[1])
+        Y = np.reshape(Y, shape[0]*shape[1])
+        X = np.reshape(X, shape[0]*shape[1])
         res = np.zeros(len(X))
         for idx in range(len(X)):
-            res[idx] = atan2(Y[idx],X[idx])
-        return np.reshape(res,shape)
+            res[idx] = atan2(Y[idx], X[idx])
+        return np.reshape(res, shape)
     else:
         print('Error, vectors not of equal length', len(X),' is not equal to ',len(Y))
         return None
 
-def get_LGO(image_width=1080,order = -8):
+def get_LGO(image_width=1080, order=-8):
     '''
     Parameters
     ----------
@@ -53,14 +52,15 @@ def get_LGO(image_width=1080,order = -8):
 
     '''
 
-    xc = image_width/2
-    yc = image_width/2
-    xxx,yyy = np.meshgrid(np.linspace(1,image_width,image_width),
-                    np.linspace(1,image_width,image_width))
-    LGO = np.mod((order * atan2_vec_2d(yyy-yc,xxx-xc)) ,(2*pi)) # Ther should maybe be a +pi before mod 2pi
+    xc = image_width / 2
+    yc = image_width / 2
+    xxx,yyy = np.meshgrid(np.linspace(1, image_width, image_width),
+                    np.linspace(1, image_width, image_width))
+    LGO = np.mod((order * atan2_vec_2d(yyy-yc, xxx-xc)), (2*pi)) # Ther should maybe be a +pi before mod 2pi
 
     return LGO
 
+# random mask encoding algorithm  (RM)
 def RM(N,M,Delta,image_width):
     return Delta[np.random.randint(0,M,N),range(N)]
 # Random Superposition Algorithm (SR)
@@ -98,6 +98,8 @@ def  GS(N,M,Delta=None,image_width=1080,nbr_iterations=30):
         print('Iteration: ', J+1, 'of ', nbr_iterations)
     result = np.reshape(128+Phi*255/(2*pi),(image_width,image_width))
     return  result
+
+
 def get_default_xm_ym():
     '''
     Generates default x,y positions for particle.
@@ -121,6 +123,8 @@ def get_default_xm_ym():
         ym[i*fac+2] = d0y+d/2*(i-1)
 
     return xm,ym
+
+
 def hexagonal(d0x, d0y, d):
     '''
     Function which generates a hexagonal pattern with a particle in the center.
@@ -138,6 +142,8 @@ def hexagonal(d0x, d0y, d):
         xm[i+1] = d0x + cos(pi*i/3)
         ym[i+1] = d0y + sin(pi*i/3)
     return xm, ym
+
+
 def hexagonal_lattice(nbr_rows, nbr_columns, d0x, d0y, d):
     '''
     Function which calculates the positions in a hexagonal
@@ -156,6 +162,8 @@ def hexagonal_lattice(nbr_rows, nbr_columns, d0x, d0y, d):
             else:
                 xm[r*nbr_columns+c] = d0x + d * c
     return xm, ym
+
+
 def get_xm_ym_rect(nbr_rows,nbr_columns, dx=30e-6,dy=30e-6, d0x=-115e-6, d0y=-115e-6):
     '''
     Generates xm,ym in a rectangular grid with a particle-particle distance of d.
@@ -210,8 +218,6 @@ def get_Isaac_xm_ym(d=30e-6, d0x=-115e-6, d0y=-115e-6):
     '''
     Two particles, first placed at [d0x, d0y] other at [d0x, d0y + d]
     '''
-
-
     xm = np.zeros((2))
     ym = np.zeros((2))
 
@@ -222,7 +228,6 @@ def get_Isaac_xm_ym(d=30e-6, d0x=-115e-6, d0y=-115e-6):
     ym[1] = d0y+d
 
     return xm, ym
-
 
 
 def get_delta(image_width = 1080, xm=[], ym=[], use_LGO=[False], order=-8):
@@ -240,7 +245,6 @@ def get_delta(image_width = 1080, xm=[], ym=[], use_LGO=[False], order=-8):
     f = np.sqrt(2e-4*0.4) # Focal length of imaging system. Empirically found value
     z = 0
     lambda_ = 532e-9
-
 
     if len(xm)<1 or len(ym)<1:
         xm,ym = get_default_xm_ym()
@@ -260,7 +264,7 @@ def get_delta(image_width = 1080, xm=[], ym=[], use_LGO=[False], order=-8):
             Delta[m,:] += np.reshape(LGO,(N))
             Delta[m,:] = Delta[m,:] % (2*pi)
         # TODO Add z-dependence to to ensuere that this works also in 3d
-    return Delta,N,M
+    return Delta, N, M
 def setup_fullscreen_plt_image():
     '''
     This script magically sets up pyplot lib so it displays an image on a secondary display

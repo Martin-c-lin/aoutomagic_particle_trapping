@@ -271,7 +271,7 @@ def MoveMotor(motor, distance):
         return False
     # For unknown reason python thinks one first must convert to float but
     # only when running from console...
-    motor.SetJogStepSize(Decimal(float(distance))) 
+    motor.SetJogStepSize(Decimal(float(distance)))
     try:
         motor.MoveJog(1, timeoutVal)# Jog in forward direction
     except:
@@ -282,22 +282,21 @@ def MoveMotor(motor, distance):
 
 def MoveMotorPixels(motor, distance, mmToPixel=16140):
     '''
-    
+    Moves motor a specified number of pixels.
 
     Parameters
     ----------
-    motor : TYPE
-        DESCRIPTION.
-    distance : TYPE
-        DESCRIPTION.
-    mmToPixel : TYPE, optional
-        DESCRIPTION. The default is 16140.
+    motor : TYPE - thorlabs motor
+         Motor to be moved
+    distance : TYPE number
+         Distance to move the motor
+    mmToPixel : TYPE number for converting from mm(motor units) to pixels, optional
+         The default is 16140, valid for our 100x objective and setup.
 
     Returns
     -------
     bool
-        DESCRIPTION.
-
+        True if move was successfull, false otherwise.
     '''
     motor.SetJogStepSize(Decimal(float(distance/mmToPixel)))
     try:
@@ -311,7 +310,7 @@ def MoveMotorPixels(motor, distance, mmToPixel=16140):
 def MoveMotorToPixel(motor, targetPixel,
                      currentPixel, maxPixel=1280, mmToPixel=16140):
     '''
-    
+
 
     Parameters
     ----------
@@ -336,8 +335,8 @@ def MoveMotorToPixel(motor, targetPixel,
         print("Target pixel outside of bounds")
         return False
     # There should be a minus here, this is due to the setup
-    dx = -(targetPixel-currentPixel)/mmToPixel 
-    motor.SetJogStepSize(Decimal(float(dx))) 
+    dx = -(targetPixel-currentPixel)/mmToPixel
+    motor.SetJogStepSize(Decimal(float(dx)))
     try:
         motor.MoveJog(1,timeoutVal)# Jog in forward direction
     except:
@@ -347,7 +346,6 @@ def MoveMotorToPixel(motor, targetPixel,
 
 def MoveTrapToPosition(motorX, motorY, targetX, targetY, trapX, trapY):
     '''
-    
 
     Parameters
     ----------
@@ -370,8 +368,8 @@ def MoveTrapToPosition(motorX, motorY, targetX, targetY, trapX, trapY):
         DESCRIPTION.
 
     '''
-    x=MoveMotorToPixel(motorX, targetX, trapX) # move X
-    y=MoveMotorToPixel(motorY, targetY, trapY) # move Y
+    x = MoveMotorToPixel(motorX, targetX, trapX) # move X
+    y = MoveMotorToPixel(motorY, targetY, trapY) # move Y
     return x and y
 
 
@@ -380,4 +378,3 @@ def setJogSpeed(motor, jog_speed, jog_acc=0.01):
     Sets the jog-speed in mm/s of the motor as well as the jog acceleration
     """
     return motor.SetJogVelocityParams(Decimal(jog_speed), Decimal(jog_acc))
-
