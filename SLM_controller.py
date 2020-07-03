@@ -28,11 +28,12 @@ def get_default_c_p(
         'SLM_algorithm' : 'GSW',
         'd0x':-115e-6,
         'd0y':-115e-6,
-        'slm_x_center': 700,#795, # needs to be recalibrated if camera is moved.
+        'slm_x_center': 711,# needs to be recalibrated if camera is moved.
         # This is the position of the 0th order of the SLM (ie where the trap)
         # with xm=ym=0 is located in camera coordinates
-        'slm_y_center': 890,#840,
-        'slm_to_pixel':4550000.0,
+        'slm_y_center': 594,,
+        'slm_to_pixel':5000000, # Basler
+        #4550000.0, #thorlabs
         'dx':20e-6,
         'dy':20e-6,
         'nbr_SLM_rows':2,
@@ -410,6 +411,7 @@ def SLM_loc_to_trap_loc(xm, ym):
     tmp_y = [y * c_p['slm_to_pixel'] + c_p['slm_y_center'] for y in ym]
     tmp = np.asarray([tmp_x, tmp_y])
     c_p['traps_absolute_pos'] = tmp
+    print(tmp)
 if __name__ == '__main__':
     c_p = get_default_c_p()
     T_D = TkinterDisplay(tkinter.Tk(), "SLM controlpanel")

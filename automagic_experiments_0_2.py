@@ -45,7 +45,7 @@ def get_default_c_p(recording_path=None):
         # not
         'recording': False,  # True if recording is on
         'half_image_width': 500,  # TODO remove this parameter,
-        'AOI': [0, 640, 0, 480], # Default for basler camera [0,1200,0,1000] TC
+        'AOI': [0, 672, 0, 512], # Default for basler camera [0,1200,0,1000] TC
         'new_AOI_camera': False,
         'new_AOI_display': False,
         'new_phasemask': False,
@@ -83,16 +83,17 @@ def get_default_c_p(recording_path=None):
         # calculated as the change needed in z (measured in steps) when the
         # motor is moved 1 mm in positive direction z_x_diff = (z1-z0)/(x1-x0) steps/mm
         # Sign ,+ or -,of this?
-        'z_y_diff': -500, # approximate, has not measured this
+        'z_y_diff': -300, # approximate, has not measured this
         'x_start': 0,
-        'temperature_z_diff': -80, #-190,  # How much the objective need to be moved
+        'temperature_z_diff': 0,#-180, #-80,  # How much the objective need to be moved
         # in ticks when the objective is heated 1C. Needs to be calibrated manually.
 
-        'slm_x_center': 700,#795, # needs to be recalibrated if camera is moved.
+        'slm_x_center': 700,#711, # needs to be recalibrated if camera is moved.
         # This is the position of the 0th order of the SLM (ie where the trap)
         # with xm=ym=0 is located in camera coordinates
-        'slm_y_center': 900,#seem to be a bit off
-        'slm_to_pixel': 4550000.0,
+        'slm_y_center': 605,#594 seem to be a tiny bit off, +5?
+        'slm_to_pixel': 5000000.0, # Basler
+        #4550000.0,# Thorlabs
         # to compensate for the changes in temperature.Measured in
         # [ticks/deg C]
         'return_z_home': False,
@@ -104,7 +105,7 @@ def get_default_c_p(recording_path=None):
 
         'use_LGO':[False],
         'LGO_order': -8,
-        'exposure_time':200, # ExposureTime in micro s
+        'exposure_time':80, # ExposureTime in micro s
         'SLM_iterations':5,
         'trap_separation_x':20e-6,
         'trap_separation_y':20e-6,
@@ -128,7 +129,7 @@ def get_default_c_p(recording_path=None):
     c_p['traps_relative_pos'][1][0] = 465
     c_p['xm'], c_p['ym'] =  SLM.get_xm_ym_rect(
             nbr_rows=2, nbr_columns=2,
-            d0x=-40e-6, d0y=-40e-6)
+            d0x=-50e-6, d0y=-50e-6)
 
     # Cannot call SLM_loc_to_trap_loc until c_p has been created so we manually
     # converto from xm,ym to trap locs here
@@ -517,6 +518,8 @@ class TkinterDisplay:
 
         threshold_entry = tkinter.Entry(top, bd=5)
         temperature_entry = tkinter.Entry(top, bd=5)
+        exposure_entry = tkinter.Entry(top, bd=5)
+
         toggle_tracking_button = tkinter.Button(
             top, text='Toggle particle tracking', command=toggle_tracking)
 
@@ -546,6 +549,20 @@ class TkinterDisplay:
             except:
                 print('Cannot convert entry to integer')
             temperature_entry.delete(0, last=5000)
+        def set_exposure():
+            if c_p['camera_model'] == 'basler':
+                entry = exposure_entry.get()
+                try:
+                    exposure_time = int(entry)
+                    if 59 < exposure_time < 4e5: # If you need more than that you are
+                        c_p['exposure_time'] = exposure_time
+                        print("Exposure time set to ", exposure_time)
+                        c_p['new_AOI_camera'] = True
+                    else:
+                        print('Exposure time out of bounds!')
+                except:
+                    print('Cannot convert entry to integer')
+                exposure_entry.delete(0, last=5000)
 
         threshold_button = tkinter.Button(
             top, text='Set threshold', command=set_threshold)
@@ -559,6 +576,9 @@ class TkinterDisplay:
         zoom_out_button = tkinter.Button(top, text='Zoom out', command=zoom_out)
         temperature_output_button = tkinter.Button(top,
             text='toggle temperature output', command=toggle_temperature_output)
+        set_exposure_button = tkinter.Button(top, text='Set exposure(basler)', command=set_exposure)
+        # TODO add exposure time control
+
         x_position = 1220
         x_position_2 = 1420
         y_position = get_y_separation()
@@ -583,7 +603,8 @@ class TkinterDisplay:
 
         # Second column
         temperature_output_button.place(x=x_position_2, y=y_position_2.__next__())
-
+        exposure_entry.place(x=x_position_2, y=y_position_2.__next__())
+        set_exposure_button.place(x=x_position_2, y=y_position_2.__next__())
     def create_SLM_window(self, _class):
         try:
             if self.new.state() == "normal":
@@ -816,15 +837,18 @@ class z_movement_thread(threading.Thread):
             if c_p['z_movement'] is not 0:
                     c_p['z_movement'] = int(c_p['z_movement'])
                     # Move up if we are not already up
-                    print("Trying to lift particles")
+                    # print("Trying to lift particles")
                     if self.piezo.move_relative(c_p['z_movement']):
                         lifting_distance += c_p['z_movement']
 
                     c_p['z_movement'] = 0
 
             elif c_p['return_z_home']:
-                # Or should it be the starging point? which is best?
+                # Compensating for hysteresis effect in movement
+                c_p['z_starting_position'] += int(lifting_distance/10)
+
                 self.piezo.move_to_position(self.compensate_focus())
+
                 lifting_distance = 0
                 c_p['return_z_home'] = False
                 print('homing z')
@@ -832,14 +856,16 @@ class z_movement_thread(threading.Thread):
             c_p['motor_current_pos'][2] = self.piezo.get_position()
         del(self.piezo)
 
-
+# TODO change the limits for the basler camera (512 and 672)
 class CameraThread(threading.Thread):
+
    def __init__(self, threadID, name):
       threading.Thread.__init__(self)
       self.threadID = threadID
       self.name = name
       # TODO, make the camera a part of the camera thread
       self.setDaemon(True)
+
    def get_important_parameters(self):
        global c_p
        parameter_dict = {
@@ -850,6 +876,8 @@ class CameraThread(threading.Thread):
        'setpoint_temperature':c_p['setpoint_temperature'],
        'target_experiment_z':c_p['target_experiment_z'],
        'temperature_output_on':c_p['temperature_output_on'],
+       'exposure_time':c_p['exposure_time'],
+       'starting_temperature':c_p['current_temperature'],
        }
        return parameter_dict
 
@@ -873,7 +901,6 @@ class CameraThread(threading.Thread):
             (image_width, image_height), isColor=False)
         exp_info_params = self.get_important_parameters()
         return video, experiment_info_name, exp_info_params
-
 
    def thorlabs_capture(self):
       number_images_saved = 0 # counts
@@ -939,28 +966,25 @@ class CameraThread(threading.Thread):
        global c_p
 
        try:
-           c_p['AOI'][1] -= np.mod(c_p['AOI'][1]-c_p['AOI'][0],16)
-           c_p['AOI'][3] -= np.mod(c_p['AOI'][3]-c_p['AOI'][2],16)
-
             # The order in which you set the size and offset parameters matter.
             # If you ever get the offset + width greater than max width the
             # camera won't accept your valuse. Thereof the if-else-statements
             # below. Conditions might need to be changed if the usecase of this
             #  funciton change
+            c_p['AOI'][1] -= np.mod(c_p['AOI'][1]-c_p['AOI'][0],16)
+            c_p['AOI'][3] -= np.mod(c_p['AOI'][3]-c_p['AOI'][2],16)
 
-           if int(c_p['AOI'][0])>0: 
-               cam.Width = int(c_p['AOI'][1] - c_p['AOI'][0])
-               cam.OffsetX = int(c_p['AOI'][0])
-           else:
-               cam.OffsetX = int(c_p['AOI'][0])
-               cam.Width = int(c_p['AOI'][1] - c_p['AOI'][0])
-           if int(c_p['AOI'][2])>0:
-                cam.Height = int(c_p['AOI'][3] - c_p['AOI'][2])
-                cam.OffsetY = int(c_p['AOI'][2])
-           else:
-                cam.OffsetY = int(c_p['AOI'][2])
-                cam.Height = int(c_p['AOI'][3] - c_p['AOI'][2])
+            width = int(c_p['AOI'][1] - c_p['AOI'][0])
+            offset_x = 672 - width - c_p['AOI'][0]
+            height = int(c_p['AOI'][3] - c_p['AOI'][2])
+            offset_y = 512 - height - c_p['AOI'][2]
 
+            cam.OffsetX = 0
+            cam.Width = width
+            cam.OffsetX = offset_x
+            cam.OffsetY = 0
+            cam.Height = height
+            cam.OffsetY = offset_y
        except Exception as e:
            print('AOI not accepted',c_p['AOI'])
            print(e)
@@ -999,7 +1023,7 @@ class CameraThread(threading.Thread):
 
                with cam.RetrieveResult(2000) as result:
                   img.AttachGrabResultBuffer(result)
-                  image = img.GetArray()
+                  image = np.flip(img.GetArray(),axis=(0,1)) # Testing to flip this guy
                   img.Release()
                   if c_p['recording']:
                       video.write(image)
@@ -1085,7 +1109,7 @@ class ExperimentControlThread(threading.Thread):
        patiance_counter = 0
        print('Lifting time. Starting from ', z_starting_pos)
        while c_p['target_experiment_z'] > c_p['motor_current_pos'][2] - z_starting_pos:
-            time.sleep(0.5)
+            time.sleep(0.2)
             all_filled, nbr_particles, min_index_trap, min_index_particle  =\
                 self.check_exp_conditions()
             if all_filled:
@@ -1206,6 +1230,7 @@ class ExperimentControlThread(threading.Thread):
                        # print(all_filled, nbr_particles, min_index_trap, min_index_particle )
                        if not all_filled and nbr_particles <= c_p['traps_occupied'].count(True): # should check number of trues in this
                            # Fewer particles than traps
+                           c_p['return_z_home'] = True
                            search_for_particles()
                        elif not all_filled and nbr_particles > c_p['traps_occupied'].count(True):
                            self.catch_particle(min_index_trap=min_index_trap,
@@ -1282,7 +1307,7 @@ def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
                 print("Trying to set invalid area")
     else:
         if left is not None and right is not None and up is not None and down is not None:
-            if 0<=left<=639 and left<=right<=640 and 0<=up<=479 and up<=down<=480:
+            if 0<=left<672 and left<=right<=672 and 0<=up<512 and up<=down<=512:
                 c_p['AOI'][0] = left
                 c_p['AOI'][1] = right
                 c_p['AOI'][2] = up
@@ -1510,9 +1535,10 @@ def focus_down():
     c_p['z_starting_position'] -= 5
 
 
-def zoom_in(margin=60):
+def zoom_in(margin=50, use_traps=False):
     # Helper function for zoom button.
     # automagically zoom in on our traps
+    # Improvement idea, make it zoom in on particles
     if c_p['camera_model'] == 'ThorlabsCam':
         left = max(min(c_p['traps_absolute_pos'][0]) - margin, 0)
         left = int(left // 20 * 20)
@@ -1525,11 +1551,11 @@ def zoom_in(margin=60):
     else:
         left = max(min(c_p['traps_absolute_pos'][0]) - margin, 0)
         left = int(left // 16 * 16)
-        right = min(max(c_p['traps_absolute_pos'][0]) + margin, 640)
+        right = min(max(c_p['traps_absolute_pos'][0]) + margin, 672)
         right = int(right // 16 * 16)
         up = max(min(c_p['traps_absolute_pos'][1]) - margin, 0)
         up = int(up // 16 * 16)
-        down = min(max(c_p['traps_absolute_pos'][1]) + margin, 480)
+        down = min(max(c_p['traps_absolute_pos'][1]) + margin, 512)
         down = int(down // 16 * 16)
 
     c_p['framerate'] = 300  # Note calculated framerate is automagically saved.
@@ -1541,7 +1567,7 @@ def zoom_out():
         set_AOI(left=0, right=1200, up=0, down=1000)
         c_p['framerate'] = 10
     else:
-        set_AOI(left=0, right=640, up=0, down=480)
+        set_AOI(left=0, right=672, up=0, down=512)
 
 def search_for_particles():
     '''
@@ -1658,24 +1684,30 @@ else:
     tlf = pylon.TlFactory.GetInstance()
     cam = pylon.InstantCamera(tlf.CreateFirstDevice())
     cam.Open()
-    image = np.zeros((640,480,1))
+    image = np.zeros((672,512,1))
 
 # Create a empty list to put the threads in
 thread_list = []
 
 # Define experiment to be run
-xm1, ym1 = SLM.hexagonal_lattice(nbr_rows=4, nbr_columns=4, d0x=-120e-6, d0y=-120e-6, d=14e-6)
+xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=1, d0x=-50e-6, d0y=-50e-6,dx=20e-6,dy=20e-6,)
 #get_xm_ym_triangle_with_center(d=32e-6, d0x=-60e-6, d0y=-60e-6)
-xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=1,nbr_columns=2, dx=90e-6,dy=15e-6, d0x=-100e-6, d0y=-100e-6)
-xm3, ym3 = SLM.get_xm_ym_rect(nbr_rows=1,nbr_columns=2, dx=50e-6,dy=20e-6, d0x=-100e-6, d0y=-100e-6)
+xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=1, d0x=-50e-6, d0y=-50e-6,dx=20e-6,dy=20e-6,)
+xm3, ym3 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=1, d0x=-50e-6, d0y=-50e-6,dx=20e-6,dy=20e-6,)
 
 experiment_schedule = [
-{'xm':xm1, 'ym':ym1, 'use_LGO':[False],
-'LGO_order':-8, 'target_experiment_z':1000, 'recording_duration':10_000,'SLM_iterations':40},
-#{'xm':xm2, 'ym':ym2, 'use_LGO':[False,],
-#'LGO_order':-8, 'target_experiment_z':1000, 'recording_duration':10_000,'SLM_iterations':1},
-#{'xm':xm3, 'ym':ym3, 'use_LGO':[False,],
-#'LGO_order':-8, 'target_experiment_z':1000, 'recording_duration':10_000,'SLM_iterations':1}
+{'xm':xm3, 'ym':ym3, 'use_LGO':[False],'target_experiment_z':1000,
+'LGO_order':4,  'recording_duration':1000,'SLM_iterations':5},
+{'xm':xm3, 'ym':ym3, 'use_LGO':[True,],
+'LGO_order':4,  'SLM_iterations':5},
+{'xm':xm3, 'ym':ym3, 'use_LGO':[True,],
+'LGO_order':-4, 'SLM_iterations':5},
+{'xm':xm3, 'ym':ym3, 'use_LGO':[True,],
+'LGO_order':12,'SLM_iterations':5},
+{'xm':xm3, 'ym':ym3, 'use_LGO':[True,],
+'LGO_order':-12, 'SLM_iterations':5},
+
+
 ]
 
 # {'xm':[-30e-6, -45e-6, -60e-6, -30e-6, -45e-6, -60e-6, -30e-6, -45e-6, -60e-6],
