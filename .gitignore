@@ -8,3 +8,5 @@ __pycache__
 fullscreen_image.py
 *.jpg
 Automatic*
+*.ipynb
+Notes*

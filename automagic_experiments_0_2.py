@@ -799,7 +799,17 @@ class MotorThread(threading.Thread):
 
        TM.DisconnectMotor(self.motor)
 
-
+def compensate_focus():
+    '''
+    Function for compensating the change in focus caused by x-y movement.
+    Returns the positon in ticks which z  should take to compensate for the focus
+    '''
+    global c_p
+    new_z_pos = (c_p['z_starting_position']
+        +c_p['z_x_diff']*(c_p['motor_starting_pos'][0] - c_p['motor_current_pos'][0])
+        +c_p['z_y_diff']*(c_p['motor_starting_pos'][1] - c_p['motor_current_pos'][1]) )
+    new_z_pos += c_p['temperature_z_diff']*(c_p['current_temperature']-c_p['starting_temperature'])
+    return int(new_z_pos)
 class z_movement_thread(threading.Thread):
     '''
     Thread for controling movement of the objective in z-directio.
@@ -814,16 +824,17 @@ class z_movement_thread(threading.Thread):
         c_p['z_starting_position'] = self.piezo.get_position()
         self.setDaemon(True)
 
-    def compensate_focus(self):
-        '''
-        Function for compensating the change in focus caused by x-y movement.
-        '''
-        global c_p
-        new_z_pos = (c_p['z_starting_position']
-            +c_p['z_x_diff']*(c_p['motor_starting_pos'][0] - c_p['motor_current_pos'][0])
-            +c_p['z_y_diff']*(c_p['motor_starting_pos'][1] - c_p['motor_current_pos'][1]) )
-        new_z_pos += c_p['temperature_z_diff']*(c_p['current_temperature']-c_p['starting_temperature'])
-        return int(new_z_pos)
+
+    # def compensate_focus(self):
+    #     '''
+    #     Function for compensating the change in focus caused by x-y movement.
+    #     '''
+    #     global c_p
+    #     new_z_pos = (c_p['z_starting_position']
+    #         +c_p['z_x_diff']*(c_p['motor_starting_pos'][0] - c_p['motor_current_pos'][0])
+    #         +c_p['z_y_diff']*(c_p['motor_starting_pos'][1] - c_p['motor_current_pos'][1]) )
+    #     new_z_pos += c_p['temperature_z_diff']*(c_p['current_temperature']-c_p['starting_temperature'])
+    #     return int(new_z_pos)
 
     def run(self):
         global c_p
@@ -832,7 +843,7 @@ class z_movement_thread(threading.Thread):
         while c_p['continue_capture']:
 
             # Check if the objective should be moved
-            self.piezo.move_to_position(self.compensate_focus()+lifting_distance)
+            self.piezo.move_to_position(compensate_focus()+lifting_distance)
 
             if c_p['z_movement'] is not 0:
                     c_p['z_movement'] = int(c_p['z_movement'])
@@ -847,7 +858,7 @@ class z_movement_thread(threading.Thread):
                 # Compensating for hysteresis effect in movement
                 c_p['z_starting_position'] += int(lifting_distance/10)
 
-                self.piezo.move_to_position(self.compensate_focus())
+                self.piezo.move_to_position(compensate_focus())
 
                 lifting_distance = 0
                 c_p['return_z_home'] = False
@@ -856,7 +867,7 @@ class z_movement_thread(threading.Thread):
             c_p['motor_current_pos'][2] = self.piezo.get_position()
         del(self.piezo)
 
-# TODO change the limits for the basler camera (512 and 672)
+
 class CameraThread(threading.Thread):
 
    def __init__(self, threadID, name):
@@ -1105,7 +1116,7 @@ class ExperimentControlThread(threading.Thread):
 
        Returns true if lift succeded
        '''
-       z_starting_pos = c_p['motor_current_pos'][2]
+       z_starting_pos = compensate_focus()
        patiance_counter = 0
        print('Lifting time. Starting from ', z_starting_pos)
        while c_p['target_experiment_z'] > c_p['motor_current_pos'][2] - z_starting_pos:
@@ -1334,6 +1345,48 @@ def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
     c_p['motor_locks'][0].release()
     c_p['motor_locks'][1].release()
 
+
+def find_focus():
+    """
+    Function which uses the laser to find a focus point
+    """
+
+    # Idea - Search for a focus, first down 1000-ticks then up 2000 ticks from down pos
+    # Take small steps :10-20 per step. Between each step check if intensity
+    # Around the traps have increased enough
+    #Direction focus down
+    #
+    focus_found = False
+    while not focus_found:
+
+        print('a')
+def in_focus(margin=40):
+    '''
+    Function for determining if a image is in focus by looking at the intensity
+    close to the trap positions and comparing it to the image median.
+    '''
+
+    global image
+    global c_p
+    median_intesity = np.median(image)
+
+
+    if c_p['camera_model'] == 'basler':
+        image_limits = [672,512]
+    else:
+        image_limits = [1200,1000]
+
+    left = int(max(min(c_p['traps_absolute_pos'][0][0]) - margin, 0))
+    right = int(min(max(c_p['traps_absolute_pos'][0][0]) + margin, image_limits[0]))
+    up = int(max(min(c_p['traps_absolute_pos'][1][0]) - margin, 0))
+    down = int(min(max(c_p['traps_absolute_pos'][1][0]) + margin, image_limits[1]))
+
+    expected_median = (left - right) * (up - down) * median_intesity
+    actual_median = sum(image[left:right,up:down,0])
+
+    if actual_median > expected_median + c_p['focus_threshold']:
+        return True
+    return False
 
 def predict_particle_position_network(network,half_image_width=50,
     network_image_width=101,
