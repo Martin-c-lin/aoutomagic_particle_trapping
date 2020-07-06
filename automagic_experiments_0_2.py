@@ -25,7 +25,8 @@ def get_default_c_p(recording_path=None):
     '''
     if recording_path is None:
         now = datetime.datetime.now()
-        recording_path = 'F:/Martin/D' + str(now.year) \
+         #F:/Martin/
+        recording_path = 'G:/D' + str(now.year) \
             + '-' + str(now.month) + '-' + str(now.day)
         try:
             os.mkdir(recording_path)
@@ -36,7 +37,7 @@ def get_default_c_p(recording_path=None):
         'serial_num_Y': '27502419',
         'serial_no_piezo': '97100532',
         'channel': 1,
-        'network_path': 'C:/Martin/Networks/',
+        'network_path': 'G:/',#'C:/Martin/Networks/',
         'recording_path': recording_path,
         'polling_rate': 100,
         'continue_capture': True,  # True if camera etc should keep updating
@@ -83,12 +84,12 @@ def get_default_c_p(recording_path=None):
         # calculated as the change needed in z (measured in steps) when the
         # motor is moved 1 mm in positive direction z_x_diff = (z1-z0)/(x1-x0) steps/mm
         # Sign ,+ or -,of this?
-        'z_y_diff': -300, # approximate, has not measured this
+        'z_y_diff': 300, # approximate, has not measured this
         'x_start': 0,
         'temperature_z_diff': 0,#-180, #-80,  # How much the objective need to be moved
         # in ticks when the objective is heated 1C. Needs to be calibrated manually.
 
-        'slm_x_center': 700,#711, # needs to be recalibrated if camera is moved.
+        'slm_x_center': 720,#700,#711, # needs to be recalibrated if camera is moved.
         # This is the position of the 0th order of the SLM (ie where the trap)
         # with xm=ym=0 is located in camera coordinates
         'slm_y_center': 605,#594 seem to be a tiny bit off, +5?
@@ -97,6 +98,7 @@ def get_default_c_p(recording_path=None):
         # to compensate for the changes in temperature.Measured in
         # [ticks/deg C]
         'return_z_home': False,
+        'focus_threshold':1_000, #
         'particle_threshold': 100,
         'particle_size_threshold': 200,  # Parcticle detection threshold
         'bright_particle': True,  # Is particle brighter than the background?
@@ -270,6 +272,7 @@ class CreateSLMThread(threading.Thread):
         Delta, N, M = SLM.get_delta(xm=c_p['xm'], ym=c_p['ym'],
             use_LGO=c_p['use_LGO'],
             order=c_p['LGO_order'])
+
         c_p['phasemask'] = SLM.GSW(
             N, M, Delta, nbr_iterations=c_p['SLM_iterations'])
 
@@ -286,9 +289,15 @@ class CreateSLMThread(threading.Thread):
                 Delta, N, M = SLM.get_delta(xm=c_p['xm'], ym=c_p['ym'],
                     use_LGO=c_p['use_LGO'],
                     order=c_p['LGO_order'])
-                c_p['phasemask'] = SLM.GSW(
-                    N, M, Delta,
-                    nbr_iterations=c_p['SLM_iterations'])
+                if M==2:
+                    print('Using normal Grechbgerg-Saxton since there are 2 traps')
+                    c_p['phasemask'] = SLM.GS(
+                        N, M, Delta,
+                        nbr_iterations=c_p['SLM_iterations'])
+                else:
+                    c_p['phasemask'] = SLM.GSW(
+                        N, M, Delta,
+                        nbr_iterations=c_p['SLM_iterations'])
                 c_p['phasemask_updated'] = True
                 c_p['new_phasemask'] = False
 
@@ -799,6 +808,7 @@ class MotorThread(threading.Thread):
 
        TM.DisconnectMotor(self.motor)
 
+
 def compensate_focus():
     '''
     Function for compensating the change in focus caused by x-y movement.
@@ -810,9 +820,11 @@ def compensate_focus():
         +c_p['z_y_diff']*(c_p['motor_starting_pos'][1] - c_p['motor_current_pos'][1]) )
     new_z_pos += c_p['temperature_z_diff']*(c_p['current_temperature']-c_p['starting_temperature'])
     return int(new_z_pos)
+
+
 class z_movement_thread(threading.Thread):
     '''
-    Thread for controling movement of the objective in z-directio.
+    Thread for controling movement of the objective in z-direction.
     Will also help with automagically adjusting the focus to the sample.
     '''
     def __init__(self, threadID, name, serial_no, channel, polling_rate=250):
@@ -854,17 +866,15 @@ class z_movement_thread(threading.Thread):
 
                     c_p['z_movement'] = 0
 
-            elif c_p['return_z_home']:
+            elif c_p['return_z_home'] and c_p['motor_current_pos'][2]>compensate_focus():
+
+                lifting_distance -= min(40,c_p['motor_current_pos'][2]-compensate_focus())
                 # Compensating for hysteresis effect in movement
-                c_p['z_starting_position'] += int(lifting_distance/10)
-
-                self.piezo.move_to_position(compensate_focus())
-
-                lifting_distance = 0
-                c_p['return_z_home'] = False
                 print('homing z')
-            time.sleep(0.3)
+            if c_p['motor_current_pos'][2]<=compensate_focus() or c_p['z_movement'] != 0:
+                c_p['return_z_home'] = False
             c_p['motor_current_pos'][2] = self.piezo.get_position()
+            time.sleep(0.3)
         del(self.piezo)
 
 
@@ -1171,14 +1181,19 @@ class ExperimentControlThread(threading.Thread):
 
         c_p['recording'] = True
         zoom_in()
+        patiance = 10
+        patiance_counter = 0
         while time.time() <= start + duration and c_p['tracking_on']:
             all_filled, nbr_particles, min_index_trap, min_index_particle  =\
                 self.check_exp_conditions()
             if all_filled:
+                patiance_counter = 0
                 time.sleep(1)
                 #print('Experiment is running', self.check_exp_conditions())
                 c_p['experiment_runtime'] = np.round(time.time() - start)
             else:
+                patiance_counter += 1
+            if patiance_counter > patiance:
                 break
         zoom_out()
         c_p['recording'] = False
@@ -1232,7 +1247,6 @@ class ExperimentControlThread(threading.Thread):
                         time.sleep(1)
                     while not run_finished and c_p['tracking_on']: # Are both these conditions needed, (while and if)?
                        time.sleep(0.3)
-                        #if c_p['tracking_on'] and not run_finished:
                        '''
                        We are (probably) in full frame mode looking for a particle
                        '''
@@ -1255,7 +1269,7 @@ class ExperimentControlThread(threading.Thread):
                        if time_remaining < 1:
                            run_finished = True
                            c_p['experiment_progress'] += 1
-
+        c_p['return_z_home'] = True
 
 def update_c_p(update_dict):
     '''
@@ -1359,11 +1373,16 @@ def find_focus():
     focus_found = False
     while not focus_found:
 
+
         print('a')
+
 def in_focus(margin=40):
     '''
     Function for determining if a image is in focus by looking at the intensity
     close to the trap positions and comparing it to the image median.
+    # Highly recommended to change to only one trap before using this function
+    # This function is also very unreliable. Better to use the old method +
+    # deep learning I believe.
     '''
 
     global image
@@ -1376,15 +1395,17 @@ def in_focus(margin=40):
     else:
         image_limits = [1200,1000]
 
-    left = int(max(min(c_p['traps_absolute_pos'][0][0]) - margin, 0))
-    right = int(min(max(c_p['traps_absolute_pos'][0][0]) + margin, image_limits[0]))
-    up = int(max(min(c_p['traps_absolute_pos'][1][0]) - margin, 0))
-    down = int(min(max(c_p['traps_absolute_pos'][1][0]) + margin, image_limits[1]))
+    left = int(max(min(c_p['traps_absolute_pos'][0]) - margin, 0))
+    right = int(min(max(c_p['traps_absolute_pos'][0]) + margin, image_limits[0]))
+    up = int(max(min(c_p['traps_absolute_pos'][1]) - margin, 0))
+    down = int(min(max(c_p['traps_absolute_pos'][1]) + margin, image_limits[1]))
 
     expected_median = (left - right) * (up - down) * median_intesity
-    actual_median = sum(image[left:right,up:down,0])
+    actual_median = np.sum(image[left:right,up:down])
 
-    if actual_median > expected_median + c_p['focus_threshold']:
+    print(median_intesity,actual_median)
+    print( expected_median + c_p['focus_threshold'])
+    if actual_median > (expected_median + c_p['focus_threshold']):
         return True
     return False
 
@@ -1741,25 +1762,41 @@ else:
 
 # Create a empty list to put the threads in
 thread_list = []
+d0x = -80e-6
+d0y = -80e-6
 
 # Define experiment to be run
-xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=1, d0x=-50e-6, d0y=-50e-6,dx=20e-6,dy=20e-6,)
-#get_xm_ym_triangle_with_center(d=32e-6, d0x=-60e-6, d0y=-60e-6)
-xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=1, d0x=-50e-6, d0y=-50e-6,dx=20e-6,dy=20e-6,)
-xm3, ym3 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=1, d0x=-50e-6, d0y=-50e-6,dx=20e-6,dy=20e-6,)
+# d = 15e-6
+#
+# xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=3, nbr_columns=3, d0x=d0x, d0y=d0y, dx=d, dy=d) # Rows and columns mixed up with new camera
+#
+# d = 20e-6
+
+# 2x1 distance dependence
+xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=10e-6, dy=20e-6,)
+xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=12e-6, dy=20e-6,)
+xm3, ym3 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=14e-6, dy=20e-6,)
+xm4, ym4 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=16e-6, dy=20e-6,)
+xm5, ym5 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=18e-6, dy=20e-6,)
+xm6, ym6 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=20e-6, dy=20e-6,)
+xm7, ym7 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=22e-6, dy=20e-6,)
+xm8, ym8 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=24e-6, dy=20e-6,)
+xm9, ym9 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=26e-6, dy=20e-6,)
+xm10, ym10 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=30e-6, dy=20e-6,)
+
 
 experiment_schedule = [
-{'xm':xm3, 'ym':ym3, 'use_LGO':[False],'target_experiment_z':1000,
-'LGO_order':4,  'recording_duration':1000,'SLM_iterations':5},
-{'xm':xm3, 'ym':ym3, 'use_LGO':[True,],
-'LGO_order':4,  'SLM_iterations':5},
-{'xm':xm3, 'ym':ym3, 'use_LGO':[True,],
-'LGO_order':-4, 'SLM_iterations':5},
-{'xm':xm3, 'ym':ym3, 'use_LGO':[True,],
-'LGO_order':12,'SLM_iterations':5},
-{'xm':xm3, 'ym':ym3, 'use_LGO':[True,],
-'LGO_order':-12, 'SLM_iterations':5},
-
+{'xm':xm1, 'ym':ym1, 'use_LGO':[False],'target_experiment_z':500,
+'LGO_order':4,  'recording_duration':500,'SLM_iterations':30}, # Should use few iteratoins when we only have 2 traps
+{'xm':xm2, 'ym':ym2, 'use_LGO':[False,]},
+{'xm':xm3, 'ym':ym3, 'use_LGO':[False,]},
+{'xm':xm4, 'ym':ym4, 'use_LGO':[False,]},
+{'xm':xm5, 'ym':ym5, 'use_LGO':[False,]},
+{'xm':xm6, 'ym':ym6, 'use_LGO':[False,]},
+{'xm':xm7, 'ym':ym7, 'use_LGO':[False,]},
+{'xm':xm8, 'ym':ym8, 'use_LGO':[False,]},
+{'xm':xm9, 'ym':ym9, 'use_LGO':[False,]},
+{'xm':xm10, 'ym':ym10, 'use_LGO':[False,]},
 
 ]
 
