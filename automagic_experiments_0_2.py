@@ -1181,7 +1181,7 @@ class ExperimentControlThread(threading.Thread):
 
         c_p['recording'] = True
         zoom_in()
-        patiance = 10
+        patiance = 50
         patiance_counter = 0
         while time.time() <= start + duration and c_p['tracking_on']:
             all_filled, nbr_particles, min_index_trap, min_index_particle  =\
