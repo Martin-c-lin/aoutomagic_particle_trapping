@@ -84,7 +84,7 @@ def get_default_c_p(recording_path=None):
         # calculated as the change needed in z (measured in steps) when the
         # motor is moved 1 mm in positive direction z_x_diff = (z1-z0)/(x1-x0) steps/mm
         # Sign ,+ or -,of this?
-        'z_y_diff': 300, # approximate, has not measured this
+        'z_y_diff': 100, # approximate, has not measured this
         'x_start': 0,
         'temperature_z_diff': 0,#-180, #-80,  # How much the objective need to be moved
         # in ticks when the objective is heated 1C. Needs to be calibrated manually.
@@ -1773,30 +1773,37 @@ d0y = -80e-6
 # d = 20e-6
 
 # 2x1 distance dependence
-xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=10e-6, dy=20e-6,)
-xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=12e-6, dy=20e-6,)
-xm3, ym3 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=14e-6, dy=20e-6,)
-xm4, ym4 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=16e-6, dy=20e-6,)
-xm5, ym5 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=18e-6, dy=20e-6,)
-xm6, ym6 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=20e-6, dy=20e-6,)
-xm7, ym7 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=22e-6, dy=20e-6,)
-xm8, ym8 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=24e-6, dy=20e-6,)
-xm9, ym9 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=26e-6, dy=20e-6,)
-xm10, ym10 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=30e-6, dy=20e-6,)
+xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=1, d0x=d0x, d0y=d0y, dx=15e-6, dy=20e-6,)
+# xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=12e-6, dy=20e-6,)
+# xm3, ym3 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=14e-6, dy=20e-6,)
+# xm4, ym4 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=16e-6, dy=20e-6,)
+# xm5, ym5 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=18e-6, dy=20e-6,)
+# xm6, ym6 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=20e-6, dy=20e-6,)
+# xm7, ym7 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=22e-6, dy=20e-6,)
+# xm8, ym8 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=24e-6, dy=20e-6,)
+# xm9, ym9 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=26e-6, dy=20e-6,)
+# xm10, ym10 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=30e-6, dy=20e-6,)
 
 
 experiment_schedule = [
-{'xm':xm1, 'ym':ym1, 'use_LGO':[False],'target_experiment_z':500,
+{'xm':xm1, 'ym':ym1, 'use_LGO':[True],'target_experiment_z':1000,
 'LGO_order':4,  'recording_duration':500,'SLM_iterations':30}, # Should use few iteratoins when we only have 2 traps
-{'xm':xm2, 'ym':ym2, 'use_LGO':[False,]},
-{'xm':xm3, 'ym':ym3, 'use_LGO':[False,]},
-{'xm':xm4, 'ym':ym4, 'use_LGO':[False,]},
-{'xm':xm5, 'ym':ym5, 'use_LGO':[False,]},
-{'xm':xm6, 'ym':ym6, 'use_LGO':[False,]},
-{'xm':xm7, 'ym':ym7, 'use_LGO':[False,]},
-{'xm':xm8, 'ym':ym8, 'use_LGO':[False,]},
-{'xm':xm9, 'ym':ym9, 'use_LGO':[False,]},
-{'xm':xm10, 'ym':ym10, 'use_LGO':[False,]},
+{'LGO_order':-4,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
+{'LGO_order':8,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
+{'LGO_order':-8,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
+{'LGO_order':12,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
+{'LGO_order':-12,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
+{'LGO_order':16,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
+{'LGO_order':-16,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
+
+# {'xm':xm3, 'ym':ym3, 'use_LGO':[False,]},
+# {'xm':xm4, 'ym':ym4, 'use_LGO':[False,]},
+# {'xm':xm5, 'ym':ym5, 'use_LGO':[False,]},
+# {'xm':xm6, 'ym':ym6, 'use_LGO':[False,]},
+# {'xm':xm7, 'ym':ym7, 'use_LGO':[False,]},
+# {'xm':xm8, 'ym':ym8, 'use_LGO':[False,]},
+# {'xm':xm9, 'ym':ym9, 'use_LGO':[False,]},
+# {'xm':xm10, 'ym':ym10, 'use_LGO':[False,]},
 
 ]
 
