@@ -26,7 +26,7 @@ def get_default_c_p(recording_path=None):
     if recording_path is None:
         now = datetime.datetime.now()
          #F:/Martin/
-        recording_path = 'G:/D' + str(now.year) \
+        recording_path = 'F:/Martin/D' + str(now.year) \
             + '-' + str(now.month) + '-' + str(now.day)
         try:
             os.mkdir(recording_path)
@@ -1108,23 +1108,32 @@ class ExperimentControlThread(threading.Thread):
                                     c_p['traps_relative_pos'][1][min_index_trap]]
           c_p['target_particle_center'] = [c_p['particle_centers'][0][min_index_particle],
                                             c_p['particle_centers'][1][min_index_particle]]
-          filled_traps_locs = c_p['traps_relative_pos'][:,c_p['traps_occupied']]
-          x, y, success = path_search(filled_traps_locs,
-                          target_particle_location=c_p['target_particle_center'],
-                          target_trap_location=c_p['target_trap_pos'])
+
+          if True in c_p['traps_occupied']:
+              c_p['xy_movement_limit'] = 40
+              # Some traps are occupied. Want to avoid catching more than one
+              # particle per trap.
+              filled_traps_locs = []
+              for idx, occupied in enumerate(c_p['traps_occupied']):
+                  if occupied:
+                      filled_traps_locs.append([c_p['traps_relative_pos'][0][idx],
+                      c_p['traps_relative_pos'][1][idx] ])
+              #print('Filled locs: ',filled_traps_locs)
+              x, y, success = path_search(filled_traps_locs,
+                              target_particle_location=c_p['target_particle_center'],
+                              target_trap_location=c_p['target_trap_pos'])
+          else:
+              success = False
+              c_p['xy_movement_limit'] = 1200
           if success:
-              c_p['motor_movements'][0] = x
+              c_p['motor_movements'][0] = -x
               c_p['motor_movements'][1] = y
           else:
               c_p['motor_movements'][0] = -(c_p['target_trap_pos'][0] - c_p['target_particle_center'][0]) # Note: Sign of this depends on setup
               c_p['motor_movements'][1] = c_p['target_trap_pos'][1] - c_p['target_particle_center'][1]
           print('Moving to ', c_p['motor_movements'])
           print('Particle at ', c_p['target_particle_center'] )
-          # If there is a trapped particle then we do not want to move very far so we accidentally lose it
-          if True in c_p['traps_occupied']:
-              c_p['xy_movement_limit'] = 40
-          else:
-              c_p['xy_movement_limit'] = 1200
+
         else:
             c_p['target_particle_center'] = []
 
@@ -1326,8 +1335,8 @@ def path_search(filled_traps_locs, target_particle_location,
     # TODO Make this more efficient
     global c_p
 
-    nx = int( (c_p['AOI'][1]-c_p['AOI'][0]) / c_p['cell_width])
-    ny = int( (c_p['AOI'][3]-c_p['AOI'][2]) / c_p['cell_width])
+    nx = int( (c_p['AOI'][1]-c_p['AOI'][0]) / c_p['cell_width'])
+    ny = int( (c_p['AOI'][3]-c_p['AOI'][2]) / c_p['cell_width'])
     X, Y = np.meshgrid(
         np.arange(0, nx),
         np.arange(0, ny)
@@ -1348,8 +1357,8 @@ def path_search(filled_traps_locs, target_particle_location,
         return x, y
 
     def loc_to_index(x, y, nx):
-        x = int(x/c_p['cell_width])
-        y = int(y/c_p['cell_width])
+        x = int(x/c_p['cell_width'])
+        y = int(y/c_p['cell_width'])
         return matrix_to_array_index(x, y, nx)
 
     adjacency_matrix = get_adjacency_matrix(nx, ny)
@@ -1357,8 +1366,8 @@ def path_search(filled_traps_locs, target_particle_location,
     trap_radii = 3
     for location in filled_traps_locs:
         print(location)
-        x = location[0] / c_p['cell_width]
-        y = location[1] / c_p['cell_width]
+        x = location[0] / c_p['cell_width']
+        y = location[1] / c_p['cell_width']
         distance_map = (X - x)**2 + (Y - y)**2
         indices = [i for i, e in enumerate(np.reshape(distance_map, (nbr_nodes))) if e < trap_radii]
         adjacency_matrix[:, indices] = 0
@@ -1419,13 +1428,18 @@ def path_search(filled_traps_locs, target_particle_location,
 
     if previous == -1:
         return 0, 0, False
-    else:
-        print(prev_y[-2])
-        print(prev_x)
-        x_move = prev_x[-2] * c_p['cell_width] - target_particle_location[0]
-        y_move = prev_y[-2] * c_p['cell_width] - target_particle_location[1]
+    elif len(prev_x) > 3:
+        x_move = prev_x[-3] * c_p['cell_width'] - target_particle_location[0]
+        # SHould be -2 but was very slow
+        y_move = prev_y[-3] * c_p['cell_width'] - target_particle_location[1]
         return x_move, y_move, True
-
+    else:
+        try:
+            x_move = prev_x[-2] * c_p['cell_width'] - target_particle_location[0]
+            y_move = prev_y[-2] * c_p['cell_width'] - target_particle_location[1]
+            return x_move, y_move, True
+        except:
+            return 0, 0, False
 
 def update_c_p(update_dict):
     '''
@@ -1930,7 +1944,7 @@ d0y = -80e-6
 # d = 20e-6
 
 # 2x1 distance dependence
-xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=1, d0x=d0x, d0y=d0y, dx=15e-6, dy=20e-6,)
+xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=3, nbr_columns=3, d0x=d0x, d0y=d0y, dx=20e-6, dy=20e-6,)
 # xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=12e-6, dy=20e-6,)
 # xm3, ym3 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=14e-6, dy=20e-6,)
 # xm4, ym4 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=16e-6, dy=20e-6,)
@@ -1943,15 +1957,15 @@ xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=1, d0x=d0x, d0y=d0y, dx=15
 
 
 experiment_schedule = [
-{'xm':xm1, 'ym':ym1, 'use_LGO':[True],'target_experiment_z':1000,
-'LGO_order':4,  'recording_duration':500,'SLM_iterations':30}, # Should use few iteratoins when we only have 2 traps
-{'LGO_order':-4,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
-{'LGO_order':8,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
-{'LGO_order':-8,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
-{'LGO_order':12,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
-{'LGO_order':-12,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
-{'LGO_order':16,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
-{'LGO_order':-16,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
+{'xm':xm1, 'ym':ym1, 'use_LGO':[False],'target_experiment_z':1000,
+'LGO_order':4,  'recording_duration':1000,'SLM_iterations':30}, # Should use few iteratoins when we only have 2 traps
+# {'LGO_order':-4,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
+# {'LGO_order':8,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
+# {'LGO_order':-8,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
+# {'LGO_order':12,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
+# {'LGO_order':-12,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
+# {'LGO_order':16,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
+# {'LGO_order':-16,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
 
 # {'xm':xm3, 'ym':ym3, 'use_LGO':[False,]},
 # {'xm':xm4, 'ym':ym4, 'use_LGO':[False,]},
