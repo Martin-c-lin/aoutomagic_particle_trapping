@@ -12,7 +12,7 @@ from tkinter import messagebox
 from functools import partial
 import datetime
 from cv2 import VideoWriter, VideoWriter_fourcc
-from tkinter import *
+from tkinter import *  # TODO Should avoid this type of import statements.
 import PIL.Image, PIL.ImageTk
 from pypylon import pylon
 
@@ -21,8 +21,10 @@ def get_default_c_p(recording_path=None):
     Dictionary containing primarily parameters used for specifying the
     experiment and synchronizing
     the program threads, such as current trap and motor serial numbers.
-    # TODO : Consider to change this into a class
     '''
+    # TODO : Consider to change this into a class.
+    # Make this object possible to pickle and unpickle to make it easier to
+    # reuse settings.
     if recording_path is None:
         now = datetime.datetime.now()
          #F:/Martin/
@@ -37,7 +39,7 @@ def get_default_c_p(recording_path=None):
         'serial_num_Y': '27502419',
         'serial_no_piezo': '97100532',
         'channel': 1,
-        'network_path': 'G:/',#'C:/Martin/Networks/',
+        'network_path': 'G:/',
         'recording_path': recording_path,
         'polling_rate': 100,
         'continue_capture': True,  # True if camera etc should keep updating
@@ -45,7 +47,6 @@ def get_default_c_p(recording_path=None):
         'zoomed_in': False,  # Keeps track of whether the image is cropped or
         # not
         'recording': False,  # True if recording is on
-        'half_image_width': 500,  # TODO remove this parameter,
         'AOI': [0, 672, 0, 512], # Default for basler camera [0,1200,0,1000] TC
         'new_AOI_camera': False,
         'new_AOI_display': False,
@@ -166,7 +167,7 @@ def terminate_threads():
         del thread
 
 
-def start_threads(cam=True, motor_x=True, motor_y=True, motor_z=True, slm=True,tracking=True, isaac=False, temp=True, experiment_schedule=None):
+def start_threads(cam=True, motor_x=True, motor_y=True, motor_z=True, slm=True, tracking=True, isaac=False, temp=True, experiment_schedule=None):
 
     """
     Function for starting all the threads, can only be called once
@@ -1164,7 +1165,6 @@ class ExperimentControlThread(threading.Thread):
        print('Lifting done. Now at',  c_p['motor_current_pos'][2])
        return True
 
-
    def check_exp_conditions(self, tracking_func=None):
         '''
         Checks if all traps are occupied. Returns true if this is the case.
@@ -1239,6 +1239,10 @@ class ExperimentControlThread(threading.Thread):
 
         * Do not record the full length but only the missing part of the video
         '''
+
+        # TODO make the program understand when two particles have been trapped
+        # in the same trap. - Possible solution: Train an AI to detect this.
+        # TODO make it add more traps, one at a time.
         global image
         global c_p
         c_p['nbr_experiments'] = len(self.experiment_schedule)
@@ -1246,8 +1250,6 @@ class ExperimentControlThread(threading.Thread):
 
         while c_p['continue_capture']: # Change to continue tracking?
             time.sleep(0.3)
-            #print('Schedule is ',self.experiment_schedule)
-            # Wi
             # Look through the whole shedule, a list of dictionaries.
 
             if c_p['tracking_on']:
@@ -1263,24 +1265,29 @@ class ExperimentControlThread(threading.Thread):
                     if not all_filled:
                         c_p['return_z_home'] = True
                         time.sleep(1)
-                    while not run_finished and c_p['tracking_on']: # Are both these conditions needed, (while and if)?
+
+                    # Start looking for particles.
+                    while not run_finished and c_p['tracking_on']:
                        time.sleep(0.3)
-                       '''
-                       We are (probably) in full frame mode looking for a particle
-                       '''
+                       # We are (probably) in full frame mode looking for a particle
 
                        all_filled, nbr_particles, min_index_trap, min_index_particle = self.check_exp_conditions()
-                       # print(all_filled, nbr_particles, min_index_trap, min_index_particle )
-                       if not all_filled and nbr_particles <= c_p['traps_occupied'].count(True): # should check number of trues in this
-                           # Fewer particles than traps
+
+                       if not all_filled and nbr_particles <= c_p['traps_occupied'].count(True):
+                           # Fewer particles than traps. Look for more particles.
                            c_p['return_z_home'] = True
                            search_for_particles()
+
                        elif not all_filled and nbr_particles > c_p['traps_occupied'].count(True):
+                           # Untrapped particles and unfilled traps. Catch particles
                            self.catch_particle(min_index_trap=min_index_trap,
                                 min_index_particle=min_index_particle)
+
                        elif all_filled:
+                           # All traps filled, ready to lift.
                            if self.lift_for_experiment():
                                print('lifted!')
+                               # Particles lifted, can start experiment.
                                time_remaining = self.run_experiment(time_remaining)
                            else:
                                c_p['return_z_home'] = True
@@ -1291,6 +1298,10 @@ class ExperimentControlThread(threading.Thread):
 
 
 def get_adjacency_matrix(nx, ny):
+    '''
+    Function for calculating the adjacency matrix used in graph theory to
+    describe which nodes are neighbours.
+    '''
     X, Y = np.meshgrid(
         np.arange(0, nx),
         np.arange(0, ny)
@@ -1327,12 +1338,15 @@ def path_search(filled_traps_locs, target_particle_location,
 
     Returns
     -------
-    TYPE move_x, move_y
+    TYPE move_x, move_y, success
         DESCRIPTION. The move to make to try and trap the particle without it
         getting caught in another trap along the way
+        success - True if path was not blocked by other particles and a move
+        was found. False otherwise.
 
     '''
-    # TODO Make this more efficient
+    # TODO Make this more efficient. Also make it possible to try and
+    # move in between particles.
     global c_p
 
     nx = int( (c_p['AOI'][1]-c_p['AOI'][0]) / c_p['cell_width'])
@@ -1441,6 +1455,7 @@ def path_search(filled_traps_locs, target_particle_location,
         except:
             return 0, 0, False
 
+
 def update_c_p(update_dict):
     '''
     Simple function for updating c_p['keys'] with new values 'values'.
@@ -1479,7 +1494,17 @@ def update_c_p(update_dict):
     while c_p['new_phasemask']:
         time.sleep(0.3)
 
+def count_interior_particles(margin=30):
+    '''
+    Function for counting the number of particles in the interior of the frame.
+    margin
+    '''
+    global c_p
+    interior_particles = 0
+    for position in c_p['particle_centers']:
+        interior_particles += 1
 
+    return interior_particles
 def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
     '''
     Function for changing the Area Of Interest for the camera to the box specified by
@@ -1510,11 +1535,6 @@ def set_AOI(half_image_width=50,left=None,right=None,up=None,down=None):
                 c_p['AOI'][3] = down
             else:
                 print("Trying to set invalid area")
-    # else:
-    #     c_p['AOI'] = [c_p['traps_relative_pos'][0]-half_image_width,
-    #         c_p['traps_relative_pos'][0]+half_image_width,
-    #         c_p['traps_relative_pos'][1]-half_image_width,
-    #         c_p['traps_relative_pos'][1]+half_image_width]
 
     print('Setting AOI to ',c_p['AOI'])
 
@@ -1607,10 +1627,9 @@ def predict_particle_position_network(network,half_image_width=50,
 
 def get_particle_trap_distances():
     '''
-    Calcualtes the distance between all particles and traps and returns a distance matrix,
-    ordered as distances(traps,particles),
-        To clarify the distance between trap n and particle m is distances[n][m
-        ]
+    Calcualtes the distance between all particles and traps and returns a
+    distance matrix, ordered as distances(traps,particles),
+    To clarify the distance between trap n and particle m is distances[n][m].
     '''
     global c_p
     update_traps_relative_pos() # just in case
@@ -1618,7 +1637,6 @@ def get_particle_trap_distances():
     nbr_particles = len(c_p['particle_centers'][0])
     distances = np.ones((nbr_traps, nbr_particles))
 
-    #print(c_p['particle_centers'][0])
     for i in range(nbr_traps):
         for j in range(nbr_particles):
             dx = (c_p['traps_relative_pos'][0][i] - c_p['particle_centers'][0][j])
@@ -1821,7 +1839,6 @@ def search_for_particles():
     '''
     x_max = 0.005 # [mm]
     delta_y = 3 # [mm]
-    #print('searching for particles in ' + c_p['search_direction'] + ' direction.')
     # Make movement
     if c_p['search_direction']== 'right':
         c_p['motor_movements'][0] = 300 # [px]
@@ -1834,10 +1851,6 @@ def search_for_particles():
 
     elif c_p['search_direction']== 'down': # currently not used
         c_p['motor_movements'][1] = -300
-
-    #if c_p['search_direction']== 'right' \
-    #    and (c_p['motor_current_pos'][0] - c_p['motor_starting_pos'][0])>x_max:
-    #    c_p['search_direction']=='up'
 
     if c_p['search_direction']== 'up' and \
         (c_p['motor_current_pos'][1]-c_p['motor_starting_pos'][1])>delta_y:
