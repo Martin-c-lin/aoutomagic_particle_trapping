@@ -55,7 +55,7 @@ def get_default_c_p(recording_path=None):
         'SLM_iterations': 30,
         'movement_threshold': 30,
         'nbr_experiments':1,
-        'framerate': 10,
+        'framerate': 500,
         'recording': False,
         'tracking_on': False,
         'setpoint_temperature': 25,
@@ -63,7 +63,8 @@ def get_default_c_p(recording_path=None):
         'starting_temperature': 23.4,
         'temperature_controller_connected': False,
         'temperature_stable': False,
-        'temperature_output_on':False,
+        'temperature_output_on':True,
+        'need_T_stable':False,
         'search_direction': 'up',
         'particle_centers': [[500], [500]],
         'target_particle_center': [500, 500],  # Position of the particle we
@@ -80,12 +81,12 @@ def get_default_c_p(recording_path=None):
         # negative for down
         'target_experiment_z': 150,  # height in ticks at which experiment should
         # be performed
-        'z_x_diff': -200,  # Used for compensating drift in z when moving the
+        'z_x_diff': 200,  # Used for compensating drift in z when moving the
         # sample. Caused by sample being slightly tilted Needs to be calibrated
         # calculated as the change needed in z (measured in steps) when the
         # motor is moved 1 mm in positive direction z_x_diff = (z1-z0)/(x1-x0) steps/mm
         # Sign ,+ or -,of this?
-        'z_y_diff': 100, # approximate, has not measured this
+        'z_y_diff': -400, # approximate, has not measured this
         'x_start': 0,
         'temperature_z_diff': 0,#-180, #-80,  # How much the objective need to be moved
         # in ticks when the objective is heated 1C. Needs to be calibrated manually.
@@ -317,7 +318,7 @@ class TemperatureThread(threading.Thread):
         '''
         Class for running the temperature controller in the background
         '''
-        def __init__(self, threadID, name, temperature_controller=None, max_diff=0.01):
+        def __init__(self, threadID, name, temperature_controller=None, max_diff=0.05):
             '''
 
 
@@ -481,18 +482,16 @@ class TkinterDisplay:
                     mini_image[y-1:y+2,x-1:x+2,2] = 255
 
         # Draw the AOI
-
-        # TODO make it so that it handles edges better
         try:
-            mini_image[l,u:d,:] = 255  # Left edge
-            mini_image[l:r,u,:] = 255  # Upper edge
-            mini_image[r,u:d,:] = 255  # Right edge
-            mini_image[l:r,d,:] = 255  # Bottom edge
+            mini_image[l,u:d,1:2] = 255  # Left edge
+            mini_image[l:r,u,1:2] = 255  # Upper edge
+            mini_image[r,u:d,1:2] = 255  # Right edge
+            mini_image[l:r,d,1:2] = 255  # Bottom edge
         except:
-            mini_image[0,0:-1,:] = 255  # Left edge
-            mini_image[0:-1,0,:] = 255  # Upper edge
-            mini_image[-1,0:-1,:] = 255  # Right edge
-            mini_image[0:-1,-1,:] = 255  # Bottom edge
+            mini_image[0,0:-1,1:2] = 255  # Left edge
+            mini_image[0:-1,0,1:2] = 255  # Upper edge
+            mini_image[-1,0:-1,1:2] = 255  # Right edge
+            mini_image[0:-1,-1,1:2] = 255  # Bottom edge
 
         self.mini_image = mini_image.astype('uint8')
 
@@ -590,7 +589,6 @@ class TkinterDisplay:
         temperature_output_button = tkinter.Button(top,
             text='toggle temperature output', command=toggle_temperature_output)
         set_exposure_button = tkinter.Button(top, text='Set exposure(basler)', command=set_exposure)
-        # TODO add exposure time control
 
         x_position = 1220
         x_position_2 = 1420
@@ -659,7 +657,6 @@ class TkinterDisplay:
 
         self.position_label = Label(self.window, text=position_text)
         self.position_label.place(x=1420, y=200)
-        # TODO add trap positions, preferably plotted as an image
         temperature_text = 'Current objective temperature is: '+\
             str(c_p['current_temperature']) + ' C' +\
                 '\n setpoint temperature is: ' +\
@@ -888,9 +885,25 @@ class CameraThread(threading.Thread):
       threading.Thread.__init__(self)
       self.threadID = threadID
       self.name = name
-      # TODO, make the camera a part of the camera thread
+      # Initalize camera and global image
+      if c_p['camera_model'] == 'ThorlabsCam':
+          # Get a thorlabs camera
+          self.cam = TC.get_camera()
+          self.cam.set_defaults(left=c_p['AOI'][0], right=c_p['AOI'][1], top=c_p['AOI'][2], bot=c_p['AOI'][3], n_frames=1)
+          exposure_time = TC.find_exposure_time(cam, targetIntensity=70) # automagically finds a decent exposure time
+          print('Exposure time = ', exposure_time)
+      else:
+          # Get a basler camera
+          tlf = pylon.TlFactory.GetInstance()
+          self.cam = pylon.InstantCamera(tlf.CreateFirstDevice())
+          self.cam.Open()
+          image = np.zeros((672,512,1))
       self.setDaemon(True)
-
+   def __del__(self):
+        if c_p['camera_model'] == 'basler':
+            self.cam.Close()
+        else:
+            self.cam.close()
    def get_important_parameters(self):
        global c_p
        parameter_dict = {
@@ -931,23 +944,22 @@ class CameraThread(threading.Thread):
       number_images_saved = 0 # counts
       video_created = False
       global c_p
-      global cam
 
       while c_p['continue_capture']:
           # Set defaults for camera, aknowledge that this has been done
-          cam.set_defaults(left=c_p['AOI'][0],
+          self.cam.set_defaults(left=c_p['AOI'][0],
               right=c_p['AOI'][1],
               top=c_p['AOI'][2],
               bot=c_p['AOI'][3])
           c_p['new_AOI_camera'] = False
           # Grab one example image
           global image
-          image = cam.grab_image(n_frames=1)
+          image = self.cam.grab_image(n_frames=1)
           image_count = 0
           # Start livefeed from the camera
 
           # Setting  maximum framerate. Will cap it to make it stable
-          cam.start_live_video(
+          self.cam.start_live_video(
                framerate=str(c_p['framerate']) + 'hertz' )
 
           start = time.time()
@@ -959,12 +971,12 @@ class CameraThread(threading.Thread):
           # Start continously capturin images now that the camera parameters have been set
           while c_p['continue_capture']\
                and not c_p['new_AOI_camera']:
-              cam.wait_for_frame(timeout=None)
+              self.cam.wait_for_frame(timeout=None)
               if c_p['recording']:
                   video.write(image)
               # Capture an image and update the image count
               image_count = image_count+1
-              image[:][:][:] = cam.latest_frame()
+              image[:][:][:] = self.cam.latest_frame()
 
 
           video.release()
@@ -973,7 +985,7 @@ class CameraThread(threading.Thread):
           video_created = False
           # Close the livefeed and calculate the fps of the captures
           end = time.time()
-          cam.stop_live_video()
+          self.cam.stop_live_video()
           fps = image_count/(end-start)
           print('Capture sequence finished', image_count,
                'Images captured in ', end-start, 'seconds. \n FPS is ',
@@ -984,7 +996,7 @@ class CameraThread(threading.Thread):
           pickle.dump(exp_info_params, outfile)
           outfile.close()
 
-   def set_basler_AOI(self,cam):
+   def set_basler_AOI(self):
        '''
        Function for setting AOI of basler camera to c_p['AOI']
        '''
@@ -1004,12 +1016,12 @@ class CameraThread(threading.Thread):
             height = int(c_p['AOI'][3] - c_p['AOI'][2])
             offset_y = 512 - height - c_p['AOI'][2]
 
-            cam.OffsetX = 0
-            cam.Width = width
-            cam.OffsetX = offset_x
-            cam.OffsetY = 0
-            cam.Height = height
-            cam.OffsetY = offset_y
+            self.cam.OffsetX = 0
+            self.cam.Width = width
+            self.cam.OffsetX = offset_x
+            self.cam.OffsetY = 0
+            self.cam.Height = height
+            self.cam.OffsetY = offset_y
        except Exception as e:
            print('AOI not accepted',c_p['AOI'])
            print(e)
@@ -1018,23 +1030,22 @@ class CameraThread(threading.Thread):
       number_images_saved = 0 # counts
       video_created = False
       global c_p
-      global cam
       img = pylon.PylonImage()
 
       while c_p['continue_capture']:
           # Set defaults for camera, aknowledge that this has been done
 
-          self.set_basler_AOI(cam)
+          self.set_basler_AOI()
           c_p['new_AOI_camera'] = False
           try:
-              cam.ExposureTime = c_p['exposure_time']
+              self.cam.ExposureTime = c_p['exposure_time']
           except:
               print('Exposure time not accepted by camera')
           # Grab one example image
           image_count = 0
 
           global image
-          cam.StartGrabbing()
+          self.cam.StartGrabbing()
 
           start = time.time()
 
@@ -1046,7 +1057,7 @@ class CameraThread(threading.Thread):
           while c_p['continue_capture']\
                and not c_p['new_AOI_camera']:
 
-               with cam.RetrieveResult(2000) as result:
+               with self.cam.RetrieveResult(2000) as result:
                   img.AttachGrabResultBuffer(result)
                   image = np.flip(img.GetArray(),axis=(0,1)) # Testing to flip this guy
                   img.Release()
@@ -1056,18 +1067,18 @@ class CameraThread(threading.Thread):
                   image_count = image_count+1
 
           video.release()
-          cam.StopGrabbing()
+          self.cam.StopGrabbing()
           del video
           video_created = False
           # Close the livefeed and calculate the fps of the captures
           end = time.time()
-
 
           # Calculate FPS
           fps = image_count/(end-start)
           print('Capture sequence finished', image_count,
                'Images captured in ', end-start, 'seconds. \n FPS is ',
                fps)
+
           # Save the experiment data in a pickled dict.
           outfile = open(experiment_info_name, 'wb')
           exp_info_params['fps'] = fps
@@ -1085,11 +1096,6 @@ class ExperimentControlThread(threading.Thread):
    '''
    Thread which does the tracking.
    '''
-   # TODO make it so that the program itself detects if the pattern contains
-   # "internal" particles which are difficult to trap, ex center particle in a
-   # 3x3 square grid of particles. Then the program should first fill the center
-   # traos by using a different phasemask for these.
-
    def __init__(self, threadID, name, experiment_schedule):
         threading.Thread.__init__(self)
         self.threadID = threadID
@@ -1265,7 +1271,7 @@ class ExperimentControlThread(threading.Thread):
                 # between the experiments
                 if all_filled:
                     nbr_active_traps = len(full_xm)
-                else all_filled:
+                else:
                     # Not all traps were filled, need to home and activate
                     # only the first trap
                     c_p['return_z_home'] = True
@@ -1513,11 +1519,9 @@ def update_c_p(update_dict, wait_for_completion=True):
     Parameter wait_for_completion should be set to True if there is a need
     to wait for phasemask to be finished updating before continuing the program.
     '''
-    # TODO Add possibility to require temperature to be stable
-
     ok_parameters = ['use_LGO', 'LGO_order', 'xm', 'ym', 'setpoint_temperature',
     'recording_duration', 'target_experiment_z', 'SLM_iterations',
-    'temperature_output_on','activate_traps_one_by_one',]
+    'temperature_output_on','activate_traps_one_by_one','need_T_stable']
 
     requires_new_phasemask = ['use_LGO', 'LGO_order', 'xm', 'ym', 'SLM_iterations']
 
@@ -1545,9 +1549,14 @@ def update_c_p(update_dict, wait_for_completion=True):
         if key in requires_new_phasemask:
             c_p['new_phasemask'] = True
 
+    # Wait for new phasemask if user whishes this
     while c_p['new_phasemask'] and wait_for_completion:
-            time.sleep(0.3)
+        time.sleep(0.3)
 
+    # Await stable temperature
+    while c_p['need_T_stable'] and not c_p['temperature_stable'] and
+        c_p['temperature_controller_connected']:
+        time.sleep(0.3)
 
 def count_interior_particles(margin=30):
     '''
@@ -1857,10 +1866,11 @@ def focus_down():
     c_p['z_starting_position'] -= 5
 
 
-def zoom_in(margin=50, use_traps=False):
-    # Helper function for zoom button.
-    # automagically zoom in on our traps
-    # Improvement idea, make it zoom in on particles
+def zoom_in(margin=60, use_traps=False):
+    '''
+    Helper function for zoom button and zoom function.
+    Zooms in on an area around the traps
+    '''
     if c_p['camera_model'] == 'ThorlabsCam':
         left = max(min(c_p['traps_absolute_pos'][0]) - margin, 0)
         left = int(left // 20 * 20)
@@ -1880,14 +1890,14 @@ def zoom_in(margin=50, use_traps=False):
         down = min(max(c_p['traps_absolute_pos'][1]) + margin, 512)
         down = int(down // 16 * 16)
 
-    c_p['framerate'] = 300  # Note calculated framerate is automagically saved.
+    c_p['framerate'] = 500  # Note calculated framerate is automagically saved.
     set_AOI(left=left, right=right, up=up, down=down)
 
 
 def zoom_out():
     if c_p['camera_model'] == 'ThorlabsCam':
         set_AOI(left=0, right=1200, up=0, down=1000)
-        c_p['framerate'] = 10
+        c_p['framerate'] = 500
     else:
         set_AOI(left=0, right=672, up=0, down=512)
 
@@ -1990,19 +2000,10 @@ def move_particles_slowly(last_d=30e-6):
 ############### Main script starts here ####################################
 c_p = get_default_c_p()
 # Create camera and set defaults
-
+global image
 if c_p['camera_model'] == 'ThorlabsCam':
-    # Get a thorlabs camera
-    cam = TC.get_camera()
-    cam.set_defaults(left=c_p['AOI'][0], right=c_p['AOI'][1], top=c_p['AOI'][2], bot=c_p['AOI'][3], n_frames=1)
-    exposure_time = TC.find_exposure_time(cam, targetIntensity=70) # automagically finds a decent exposure time
-    print('Exposure time = ', exposure_time)
-    image = cam.grab_image()
+    image = np.zeros((c_p['AOI'][1]-c_p['AOI'][0], c_p['AOI'][3]-c_p['AOI'][2], 1))
 else:
-    # Get a basler camera
-    tlf = pylon.TlFactory.GetInstance()
-    cam = pylon.InstantCamera(tlf.CreateFirstDevice())
-    cam.Open()
     image = np.zeros((672,512,1))
 
 # Create a empty list to put the threads in
@@ -2018,7 +2019,7 @@ d0y = -80e-6
 # d = 20e-6
 
 # 2x1 distance dependence
-xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=3, nbr_columns=3, d0x=d0x, d0y=d0y, dx=20e-6, dy=20e-6,)
+xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=3, nbr_columns=1, d0x=d0x, d0y=d0y, dx=20e-6, dy=20e-6,)
 # xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=12e-6, dy=20e-6,)
 # xm3, ym3 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=14e-6, dy=20e-6,)
 # xm4, ym4 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=16e-6, dy=20e-6,)
@@ -2071,9 +2072,5 @@ c_p['motor_running'] = False
 
 # Shut down camera and motors safely
 terminate_threads()
-if c_p['camera_model'] == 'basler':
-    cam.Close()
-else:
-    cam.close()
 print(thread_list)
 sys.exit()
