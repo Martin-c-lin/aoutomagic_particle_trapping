@@ -1197,7 +1197,6 @@ class ExperimentControlThread(threading.Thread):
         c_p['particle_centers'] = [x, y]
         c_p['traps_occupied'] = [False for i in range(len(c_p['traps_absolute_pos'][0]))]
         min_index_trap, min_index_particle = find_closest_unoccupied()
-        #self.catch_particle(min_index_trap, min_index_particle)
 
         if False not in c_p['traps_occupied']:
             # All traps have been occupied
@@ -1536,6 +1535,7 @@ def update_c_p(update_dict, wait_for_completion=True):
     while c_p['need_T_stable'] and not c_p['temperature_stable'] and\
         c_p['temperature_controller_connected']:
         time.sleep(0.3)
+
 
 def count_interior_particles(margin=30):
     '''
