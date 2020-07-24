@@ -42,7 +42,7 @@ def get_default_c_p(recording_path=None):
         'network_path': 'G:/',
         'recording_path': recording_path,
         'polling_rate': 100,
-        'continue_capture': True,  # True if camera etc should keep updating
+        'program_running': True,  # True if camera etc should keep updating
         'motor_running': True,  # Should the motor thread keep running
         'zoomed_in': False,  # Keeps track of whether the image is cropped or
         # not
@@ -159,7 +159,7 @@ def terminate_threads():
     None.
 
     '''
-    c_p['continue_capture'] = False
+    c_p['program_running'] = False
     c_p['motor_running'] = False
     c_p['tracking_on'] = False
     time.sleep(1)
@@ -288,7 +288,7 @@ class CreateSLMThread(threading.Thread):
         c_p['traps_occupied'] =\
             [False for i in range(len(c_p['traps_absolute_pos'][0]))]
 
-        while c_p['continue_capture']:
+        while c_p['program_running']:
             if c_p['new_phasemask']:
                 # Calcualte new delta and phasemask
                 Delta, N, M = SLM.get_delta(xm=c_p['xm'], ym=c_p['ym'],
@@ -377,7 +377,7 @@ class TemperatureThread(threading.Thread):
                 # Turn on output and continuosly set and query the temperature.
                 if c_p['temperature_output_on']:
                     self.temperature_controller.turn_on_output()
-                while c_p['continue_capture']:
+                while c_p['program_running']:
                     if 0 < c_p['setpoint_temperature'] < 40:
                         self.temperature_controller.set_setpoint_temperature(c_p['setpoint_temperature'])
                     else:
@@ -408,7 +408,7 @@ class TemperatureThread(threading.Thread):
                 self.temperature_controller.turn_off_output()
 
 
-class TkinterDisplay:
+class UserInterface:
 
     def __init__(self, window, window_title,experiment_schedule=None):
         self.window = window
@@ -445,6 +445,14 @@ class TkinterDisplay:
         start_threads(experiment_schedule=experiment_schedule)
 
         self.window.mainloop()
+
+    def __del__(self):
+        # Close the program
+        terminate_threads()
+        c_p['program_running'] = False
+        c_p['motor_running'] = False
+        c_p['tracking_on'] = False
+
     def create_trap_image(self):
         global c_p
         trap_x = c_p['traps_absolute_pos'][0]
@@ -616,6 +624,7 @@ class TkinterDisplay:
         temperature_output_button.place(x=x_position_2, y=y_position_2.__next__())
         exposure_entry.place(x=x_position_2, y=y_position_2.__next__())
         set_exposure_button.place(x=x_position_2, y=y_position_2.__next__())
+
     def create_SLM_window(self, _class):
         try:
             if self.new.state() == "normal":
@@ -853,7 +862,7 @@ class z_movement_thread(threading.Thread):
         global c_p
         lifting_distance = 0
         c_p['motor_current_pos'][2] = self.piezo.get_position()
-        while c_p['continue_capture']:
+        while c_p['program_running']:
 
             # Check if the objective should be moved
             self.piezo.move_to_position(compensate_focus()+lifting_distance)
@@ -945,7 +954,7 @@ class CameraThread(threading.Thread):
       video_created = False
       global c_p
 
-      while c_p['continue_capture']:
+      while c_p['program_running']:
           # Set defaults for camera, aknowledge that this has been done
           self.cam.set_defaults(left=c_p['AOI'][0],
               right=c_p['AOI'][1],
@@ -969,7 +978,7 @@ class CameraThread(threading.Thread):
               video, experiment_info_name, exp_info_params = self.create_video_writer()
               video_created = True
           # Start continously capturin images now that the camera parameters have been set
-          while c_p['continue_capture']\
+          while c_p['program_running']\
                and not c_p['new_AOI_camera']:
               self.cam.wait_for_frame(timeout=None)
               if c_p['recording']:
@@ -1032,7 +1041,7 @@ class CameraThread(threading.Thread):
       global c_p
       img = pylon.PylonImage()
 
-      while c_p['continue_capture']:
+      while c_p['program_running']:
           # Set defaults for camera, aknowledge that this has been done
 
           self.set_basler_AOI()
@@ -1054,7 +1063,7 @@ class CameraThread(threading.Thread):
               video, experiment_info_name, exp_info_params = self.create_video_writer()
               video_created = True
           # Start continously capturin images now that the camera parameters have been set
-          while c_p['continue_capture']\
+          while c_p['program_running']\
                and not c_p['new_AOI_camera']:
 
                with self.cam.RetrieveResult(2000) as result:
@@ -1139,8 +1148,8 @@ class ExperimentControlThread(threading.Thread):
           else:
               c_p['motor_movements'][0] = -(c_p['target_trap_pos'][0] - c_p['target_particle_center'][0]) # Note: Sign of this depends on setup
               c_p['motor_movements'][1] = c_p['target_trap_pos'][1] - c_p['target_particle_center'][1]
-          print('Moving to ', c_p['motor_movements'])
-          print('Particle at ', c_p['target_particle_center'] )
+          # print('Moving to ', c_p['motor_movements'])
+          # print('Particle at ', c_p['target_particle_center'] )
 
         else:
             c_p['target_particle_center'] = []
@@ -1253,7 +1262,7 @@ class ExperimentControlThread(threading.Thread):
         c_p['nbr_experiments'] = len(self.experiment_schedule)
         c_p['experiment_progress'] = 0
 
-        while c_p['continue_capture']: # Change to continue tracking?
+        while c_p['program_running']: # Change to continue tracking?
             time.sleep(0.3)
             # Look through the whole shedule, a list of dictionaries.
 
@@ -1282,36 +1291,6 @@ class ExperimentControlThread(threading.Thread):
                             'ym':full_ym[:nbr_active_traps]}
                         update_c_p(active_traps_dict)
                 # Start looking for particles.
-                '''
-                while not run_finished and c_p['tracking_on']:
-                   time.sleep(0.3)
-                   # We are (probably) in full frame mode looking for a particle
-
-                   all_filled, nbr_particles, min_index_trap, min_index_particle = self.check_exp_conditions()
-
-                   if not all_filled and nbr_particles <= c_p['traps_occupied'].count(True):
-                       # Fewer particles than traps. Look for more particles.
-                       c_p['return_z_home'] = True
-                       search_for_particles()
-
-                   elif not all_filled and nbr_particles > c_p['traps_occupied'].count(True):
-                       # Untrapped particles and unfilled traps. Catch particles
-                       self.catch_particle(min_index_trap=min_index_trap,
-                            min_index_particle=min_index_particle)
-
-                   elif all_filled:
-                       # All traps filled, ready to lift.
-                       if self.lift_for_experiment():
-                           print('lifted!')
-                           # Particles lifted, can start experiment.
-                           time_remaining = self.run_experiment(time_remaining)
-                       else:
-                           c_p['return_z_home'] = True
-
-                   if time_remaining < 1:
-                       run_finished = True
-                       c_p['experiment_progress'] += 1
-                '''
                 while not run_finished and c_p['tracking_on']:
                    time.sleep(0.3)
                    # We are (probably) in full frame mode looking for a particle
@@ -1554,7 +1533,7 @@ def update_c_p(update_dict, wait_for_completion=True):
         time.sleep(0.3)
 
     # Await stable temperature
-    while c_p['need_T_stable'] and not c_p['temperature_stable'] and
+    while c_p['need_T_stable'] and not c_p['temperature_stable'] and\
         c_p['temperature_controller_connected']:
         time.sleep(0.3)
 
@@ -1890,7 +1869,8 @@ def zoom_in(margin=60, use_traps=False):
         down = min(max(c_p['traps_absolute_pos'][1]) + margin, 512)
         down = int(down // 16 * 16)
 
-    c_p['framerate'] = 500  # Note calculated framerate is automagically saved.
+    c_p['framerate'] = 500
+    # Note calculated framerate is automagically saved.
     set_AOI(left=left, right=right, up=up, down=down)
 
 
@@ -2012,14 +1992,8 @@ d0x = -80e-6
 d0y = -80e-6
 
 # Define experiment to be run
-# d = 15e-6
-#
-# xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=3, nbr_columns=3, d0x=d0x, d0y=d0y, dx=d, dy=d) # Rows and columns mixed up with new camera
-#
-# d = 20e-6
 
-# 2x1 distance dependence
-xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=3, nbr_columns=1, d0x=d0x, d0y=d0y, dx=20e-6, dy=20e-6,)
+xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=3, nbr_columns=3, d0x=d0x, d0y=d0y, dx=20e-6, dy=20e-6,)
 # xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=12e-6, dy=20e-6,)
 # xm3, ym3 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=14e-6, dy=20e-6,)
 # xm4, ym4 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=16e-6, dy=20e-6,)
@@ -2033,7 +2007,7 @@ xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=3, nbr_columns=1, d0x=d0x, d0y=d0y, dx=20
 
 experiment_schedule = [
 {'xm':xm1, 'ym':ym1, 'use_LGO':[False],'target_experiment_z':1000,
-'LGO_order':4,  'recording_duration':1000,'SLM_iterations':30}, # Should use few iteratoins when we only have 2 traps
+'LGO_order':4,  'recording_duration':1000,'SLM_iterations':30,'activate_traps_one_by_one':False}, # Should use few iteratoins when we only have 2 traps
 # {'LGO_order':-4,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
 # {'LGO_order':8,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
 # {'LGO_order':-8,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
@@ -2063,14 +2037,7 @@ experiment_schedule = [
 # 'ym':[-30e-6, -30e-6, -30e-6, -45e-6, -45e-6, -45e-6, -60e-6, -60e-6, -60e-6],
 # 'use_LGO':[False]},
 
-T_D = TkinterDisplay(tkinter.Tk(), "Control display",
+T_D = UserInterface(tkinter.Tk(), "Control display",
     experiment_schedule=experiment_schedule)
 
-# Close the threads and the camera
-c_p['continue_capture'] = False # All threds exits their main loop once this parameter is changed
-c_p['motor_running'] = False
-
-# Shut down camera and motors safely
-terminate_threads()
-print(thread_list)
 sys.exit()
