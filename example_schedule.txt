@@ -1,4 +1,5 @@
 1:
+#To add comments write on lines without data. Do not use colon in the comments.
 xm:-80e-6, -100e-6
 ym:-60e-6, -60e-6
 use_LGO:True,True,

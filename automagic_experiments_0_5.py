@@ -12,11 +12,23 @@ import threading, time, cv2, queue, copy, sys, tkinter, os, pickle
 from tkinter import messagebox
 from tkinter import filedialog as fd
 from functools import partial
-import datetime
+from datetime import datetime
 from cv2 import VideoWriter, VideoWriter_fourcc
 from tkinter import *  # TODO Should avoid this type of import statements.
 import PIL.Image, PIL.ImageTk
 from pypylon import pylon
+
+def get_recording_path(base_path='F:/Martin/D', extension_path=""):
+    now = datetime.now()
+    recording_path = base_path + str(now.year) \
+        + '-' + str(now.month) + '-' + str(now.day)
+    recording_path = recording_path + extension_path if len(extension_path) > 0 else recording_path
+    print(recording_path)
+    try:
+        os.mkdir(recording_path)
+    except:
+        print('Directory already exist')
+    return recording_path
 
 def get_default_c_p(recording_path=None):
     '''
@@ -28,14 +40,7 @@ def get_default_c_p(recording_path=None):
     # Make this object possible to pickle and unpickle to make it easier to
     # reuse settings.
     if recording_path is None:
-        now = datetime.datetime.now()
-         #F:/Martin/
-        recording_path = 'F:/Martin/D' + str(now.year) \
-            + '-' + str(now.month) + '-' + str(now.day)
-        try:
-            os.mkdir(recording_path)
-        except:
-            print('Directory already exist')
+        recording_path = get_recording_path()
     c_p = {
         'serial_num_X': '27502438',
         'serial_num_Y': '27502419',
@@ -317,8 +322,6 @@ class TemperatureThread(threading.Thread):
         '''
         def __init__(self, threadID, name, temperature_controller=None, max_diff=0.05):
             '''
-
-
             Parameters
             ----------
             threadID : int
@@ -452,14 +455,15 @@ class UserInterface:
 
     def read_experiment_dictionary(self):
         global c_p
-        name = fd.askopenfilename()
+        filepath = fd.askopenfilename()
         # TODO make it so that we can handle exceptions from the file better here.
         # Also make it so it creates a new directory to save the data in named
         # after the schedule file.
-        experiment_list = rdff.ReadFileToExperimentList(name)
+        experiment_list = rdff.ReadFileToExperimentList(filepath)
         if len(experiment_list) > 0:
             c_p['experiment_schedule'] = experiment_list
             print('Starting the following experiment. \n', experiment_list)
+            # Reset experiment progress
             if c_p['tracking_on']:
                 c_p['tracking_on'] = False
                 time.sleep(0.5)
@@ -469,6 +473,9 @@ class UserInterface:
             else:
                 c_p['experiment_progress'] = 0
             c_p['nbr_experiments'] = len(c_p['experiment_schedule'])
+            # Update recording path
+            name = filepath[filepath.rfind('/')+1:filepath.rfind('.')]
+            c_p['recording_path'] = get_recording_path(extension_path='_'+name)
         else:
             print('Invalid or empty file.')
 
@@ -536,8 +543,7 @@ class UserInterface:
         global c_p
 
         # TODO add home z button
-        exit_button = tkinter.Button(top, text='Exit program',
-                                     command=terminate_threads)
+
         up_button = tkinter.Button(top, text='Move up',
                                    command=partial(move_button, 0))
         down_button = tkinter.Button(top, text='Move down',
@@ -624,7 +630,6 @@ class UserInterface:
         x_position_2 = 1420
         y_position = get_y_separation()
         y_position_2 = get_y_separation()
-        exit_button.place(x=x_position, y=y_position.__next__())
         up_button.place(x=x_position, y=y_position.__next__())
         down_button.place(x=x_position, y=y_position.__next__())
         right_button.place(x=x_position, y=y_position.__next__())
@@ -959,7 +964,7 @@ class CameraThread(threading.Thread):
         Will also save the relevant parameters of the experiments.
         '''
         global c_p
-        now = datetime.datetime.now()
+        now = datetime.now()
         fourcc = VideoWriter_fourcc(*'MJPG')
         image_width = c_p['AOI'][1]-c_p['AOI'][0]
         image_height = c_p['AOI'][3]-c_p['AOI'][2]
