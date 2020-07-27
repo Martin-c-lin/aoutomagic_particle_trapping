@@ -6,14 +6,15 @@ Created on Mon Jul 27 08:49:16 2020
 """
 
 # TODO move this into the main script
+# TODO: use_LGO (and LGO_order?) are lists of bools not numbers.
 float_parameters = ['LGO_order', 'setpoint_temperature',
                     'recording_duration', 'target_experiment_z',
                     'SLM_iterations']
 
 bool_parameters = ['temperature_output_on', 'activate_traps_one_by_one',
-                   'need_T_stable', 'use_LGO']
-
-list_parameters = ['xm', 'ym']
+                   'need_T_stable']
+bool_list = ['use_LGO']
+float_list = ['xm', 'ym']
 
 
 def Line2KeyValue(line):
@@ -56,9 +57,13 @@ def Line2KeyValue(line):
         if key in float_parameters:
             return key, float(string_value)
         elif key in bool_parameters:
-            return key, bool(string_value)
-        elif key in list_parameters:
+            value = (string_value == 'True')
+            return key, value
+        elif key in float_list:
             value_list = [float(s) for s in string_value.split(',')]
+            return key, value_list
+        elif key in bool_list:
+            value_list = [(s=='True') for s in string_value.split(',')]
             return key, value_list
     except:
         print('Warning, could not convert value in ', string_value)

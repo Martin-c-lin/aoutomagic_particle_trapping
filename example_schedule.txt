@@ -1,0 +1,7 @@
+1:
+xm:-80e-6, -100e-6
+ym:-60e-6, -60e-6
+use_LGO:True,True,
+recording_duration:1000
+2:
+use_LGO:False,

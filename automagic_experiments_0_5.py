@@ -450,7 +450,7 @@ class UserInterface:
         c_p['motor_running'] = False
         c_p['tracking_on'] = False
 
-    def read_experiment_dictionary():
+    def read_experiment_dictionary(self):
         global c_p
         name = fd.askopenfilename()
         # TODO make it so that we can handle exceptions from the file better here.
@@ -468,6 +468,7 @@ class UserInterface:
                 c_p['tracking_on'] = True
             else:
                 c_p['experiment_progress'] = 0
+            c_p['nbr_experiments'] = len(c_p['experiment_schedule'])
         else:
             print('Invalid or empty file.')
 
@@ -616,7 +617,7 @@ class UserInterface:
         set_exposure_button = tkinter.Button(top, text='Set exposure(basler)', command=set_exposure)
         experiment_schedule_button = tkinter.Button(top,
             text='Select experiment schedule',
-            command=read_experiment_dictionary
+            command=self.read_experiment_dictionary
             )
 
         x_position = 1220
@@ -646,6 +647,7 @@ class UserInterface:
         exposure_entry.place(x=x_position_2, y=y_position_2.__next__())
         set_exposure_button.place(x=x_position_2, y=y_position_2.__next__())
         experiment_schedule_button.place(x=x_position_2, y=y_position_2.__next__())
+
     def create_SLM_window(self, _class):
         try:
             if self.new.state() == "normal":
