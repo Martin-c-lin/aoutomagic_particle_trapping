@@ -30,6 +30,7 @@ def get_recording_path(base_path='F:/Martin/D', extension_path=""):
         print('Directory already exist')
     return recording_path
 
+
 def get_default_c_p(recording_path=None):
     '''
     Dictionary containing primarily parameters used for specifying the
@@ -42,8 +43,7 @@ def get_default_c_p(recording_path=None):
     if recording_path is None:
         recording_path = get_recording_path()
     c_p = {
-        'serial_num_X': '27502438',
-        'serial_num_Y': '27502419',
+        'serial_nums_motors': ['27502438','27502419'],
         'serial_no_piezo': '97100532',
         'channel': 1,
         'network_path': 'G:/',
@@ -83,6 +83,8 @@ def get_default_c_p(recording_path=None):
         # needed for z-compensation
         'motor_current_pos': [0, 0, 0],  # Current position of x-y motors,
         # needed for z-compensation, z is the last
+        'motor_connected':[False, False, False],
+        'connect_motor':[True, True, True],
         'z_starting_position': 0,  # Where the experiments starts in z position
         'z_movement': 0,  # Target z-movement in "ticks" positive for up,
         # negative for down
@@ -437,7 +439,7 @@ class UserInterface:
         self.window.geometry('1700x1000')
         # After it is called once, the update method will be automatically
         # called every delay milliseconds
-        self.delay = 50
+        self.delay = 100#50
 
         self.create_SLM_window(SLM_window)
         self.create_indicators()
@@ -543,6 +545,8 @@ class UserInterface:
         global c_p
 
         # TODO add home z button
+        # TODO: Check if we can change colors of buttons by making buttons part of
+        # object.
 
         up_button = tkinter.Button(top, text='Move up',
                                    command=partial(move_button, 0))
@@ -593,6 +597,7 @@ class UserInterface:
             except:
                 print('Cannot convert entry to integer')
             temperature_entry.delete(0, last=5000)
+
         def set_exposure():
             if c_p['camera_model'] == 'basler':
                 entry = exposure_entry.get()
@@ -607,6 +612,13 @@ class UserInterface:
                 except:
                     print('Cannot convert entry to integer')
                 exposure_entry.delete(0, last=5000)
+
+        def connect_disconnect_motorX():
+            # TODO: Behaviour of this might be odd if the motor did not get connected.
+            c_p['connect_motor'][0] = not c_p['connect_motor'][0]
+
+        def connect_disconnect_motorY():
+            c_p['connect_motor'][1] = not c_p['connect_motor'][1]
 
         threshold_button = tkinter.Button(
             top, text='Set threshold', command=set_threshold)
@@ -625,11 +637,19 @@ class UserInterface:
             text='Select experiment schedule',
             command=self.read_experiment_dictionary
             )
+        # Motor buttons. Attributes of UserInterface class os we can easily change
+        # the description text of them.
+        self.toggle_motorX_button = tkinter.Button(
+            top, text='Connect motor x', command=connect_disconnect_motorX)
+        self.toggle_motorY_button = tkinter.Button(
+            top, text='Connect motor y', command=connect_disconnect_motorY)
 
         x_position = 1220
         x_position_2 = 1420
         y_position = get_y_separation()
         y_position_2 = get_y_separation()
+
+        # Place all the buttons, starting with first column
         up_button.place(x=x_position, y=y_position.__next__())
         down_button.place(x=x_position, y=y_position.__next__())
         right_button.place(x=x_position, y=y_position.__next__())
@@ -652,6 +672,8 @@ class UserInterface:
         exposure_entry.place(x=x_position_2, y=y_position_2.__next__())
         set_exposure_button.place(x=x_position_2, y=y_position_2.__next__())
         experiment_schedule_button.place(x=x_position_2, y=y_position_2.__next__())
+        self.toggle_motorX_button.place(x=x_position_2, y=y_position_2.__next__())
+        self.toggle_motorY_button.place(x=x_position_2, y=y_position_2.__next__())
 
     def create_SLM_window(self, _class):
         try:
@@ -667,6 +689,41 @@ class UserInterface:
         cv2.imwrite(c_p['recording_path'] + "/frame-" +\
                     time.strftime("%d-%m-%Y-%H-%M-%S") +\
                     ".jpg", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+
+    def get_temperature_info(self):
+        global c_p
+        if c_p['temperature_controller_connected']:
+            temperature_info = 'Current objective temperature is: '+str(c_p['current_temperature'])+' C'+'\n setpoint temperature is: '+str(c_p['setpoint_temperature'])+' C'
+            if c_p['temperature_stable']:
+                temperature_info += '\nTemperature is stable. '
+            else:
+                temperature_info += '\nTemperature is not stable. '
+            if c_p['temperature_output_on']:
+                temperature_info += '\n Temperature controller output is on.'
+            else:
+                temperature_info += '\n Temperature controller output is off.'
+        else:
+            temperature_info = 'Temperature controller is not connected.'
+
+
+        return temperature_info
+
+    def get_position_info(self):
+        global c_p
+        # Add position info
+        position_text = 'x: '+str(c_p['motor_current_pos'][0])+\
+            'mm   y: '+str(c_p['motor_current_pos'][1])+\
+            'mm   z: '+str(c_p['motor_current_pos'][2])
+        position_text += '\n Experiments run ' + str(c_p['experiment_progress'])
+        position_text += ' out of ' + str(c_p['nbr_experiments'])
+        position_text += '  ' + str(c_p['experiment_runtime']) + 's run out of ' + str(c_p['recording_duration'])
+        position_text += '\n Current search direction is: ' + str(c_p['search_direction'] + '\n')
+        # Add motor connection info
+        x_connected = 'connected. ' if c_p['motor_connected'][0] else 'disconnected.'
+        y_connected = 'connected. ' if c_p['motor_connected'][1] else 'disconnected.'
+        position_text += 'Motor x is ' + x_connected
+        position_text += ' Motor y is ' + y_connected + '\n'
+        return position_text
 
     def create_indicators(self):
         global c_p
@@ -687,24 +744,16 @@ class UserInterface:
                 self.window, text='particle tracking is off', bg='red')
         self.tracking_label.place(x=1220, y=780)
 
-        position_text = 'x: ' +\
-            str(c_p['motor_current_pos'][0]) + 'mm.   y: ' \
-                + str(c_p['motor_current_pos'][1]) + 'mm   z: '\
-                + str(c_p['motor_current_pos'][2])
-
-        self.position_label = Label(self.window, text=position_text)
-        self.position_label.place(x=1420, y=200)
-        temperature_text = 'Current objective temperature is: '+\
-            str(c_p['current_temperature']) + ' C' +\
-                '\n setpoint temperature is: ' +\
-                str(c_p['setpoint_temperature']) + ' C'
-        self.temperature_label = Label(self.window, text=temperature_text)
-        self.temperature_label.place(x=1420, y=340)
+        self.position_label = Label(self.window, text=self.get_position_info())
+        self.position_label.place(x=1420, y=400)
+        self.temperature_label = Label(self.window, text=self.get_temperature_info())
+        self.temperature_label.place(x=1420, y=540)
 
     def update_indicators(self):
         '''
         Helper function for updating on-screen indicators
         '''
+        # TODO: Try an incorporate some of the labels into the buttons.
         global c_p
         # Update if recording is turned on or not
         if c_p['recording']:
@@ -717,29 +766,16 @@ class UserInterface:
         else:
             self.tracking_label.config(text='particle tracking is off', bg='red')
 
-        if c_p['temperature_controller_connected']:
-            temperature_text = 'Current objective temperature is: '+str(c_p['current_temperature'])+' C'+'\n setpoint temperature is: '+str(c_p['setpoint_temperature'])+' C'
-            if c_p['temperature_stable']:
-                temperature_text += '\nTemperature is stable. '
-            else:
-                temperature_text += '\nTemperature is not stable. '
-            if c_p['temperature_output_on']:
-                temperature_text += '\n Temperature controller output is on.'
-            else:
-                temperature_text += '\n Temperature controller output is off.'
-        else:
-            temperature_text = 'Temperature controller is not connected.'
+        self.temperature_label.config(text=self.get_temperature_info())
 
-        self.temperature_label.config(text=temperature_text)
 
-        position_text = 'x: '+str(c_p['motor_current_pos'][0])+\
-            'mm   y: '+str(c_p['motor_current_pos'][1])+\
-            'mm   z: '+str(c_p['motor_current_pos'][2])
-        position_text += '\n Experiments run ' + str(c_p['experiment_progress'])
-        position_text += ' out of ' + str(c_p['nbr_experiments'])
-        position_text += '  ' + str(c_p['experiment_runtime']) + 's run out of ' + str(c_p['recording_duration'])
-        position_text += '\n Current search direction is: ' + str(c_p['search_direction'])
-        self.position_label.config(text=position_text)
+        self.position_label.config(text=self.get_position_info())
+
+        # Motor connection buttons
+        x_connect = 'Disconnect' if c_p['connect_motor'][0] else 'Connect'
+        self.toggle_motorX_button.config(text=x_connect + ' motor x')
+        y_connect = 'Disconnect' if c_p['connect_motor'][1] else 'Connect'
+        self.toggle_motorY_button.config(text=y_connect + ' motor y')
 
     def resize_display_image(self, img):
         img_size = np.shape(img)
@@ -810,43 +846,65 @@ class MotorThread(threading.Thread):
       self.threadID = threadID
       self.name = name
       self.axis = axis # 0 = x-axis, 1 = y axis
-      if self.axis==0:
-          self.motor = TM.InitiateMotor(c_p['serial_num_X'],
-            pollingRate=c_p['polling_rate'])
-      elif self.axis==1:
-          self.motor = TM.InitiateMotor(c_p['serial_num_Y'],
+
+      # Initiate contact with motor
+      if self.axis == 0 or self.axis == 1:
+          self.motor = TM.InitiateMotor(c_p['serial_nums_motors'][self.axis],
             pollingRate=c_p['polling_rate'])
       else:
-          print('Invalid choice of axis, no motor available')
-      c_p['motor_starting_pos'][self.axis] = float(str(self.motor.Position))
-      print('Motor is at ', c_p['motor_starting_pos'][self.axis])
+          raise Exception("Invalid choice of axis, no motor available.")
+
+      # Read motor starting position
+      if self.motor is not None:
+          c_p['motor_starting_pos'][self.axis] = float(str(self.motor.Position))
+          print('Motor is at ', c_p['motor_starting_pos'][self.axis])
+          c_p['motor_connected'][self.axis] = True
+      else:
+          c_p['motor_connected'][self.axis] = False
       self.setDaemon(True)
 
     def run(self):
-       print('Running motor thread')
-       global c_p
-       while c_p['motor_running']:
-            # Acquire lock to ensure that it is safe to move the motor
-            c_p['motor_locks'][self.axis].acquire()
+        print('Running motor thread')
+        global c_p
+        while c_p['motor_running']:
+            # If motor connected and it should be connected, check for next move
+            if c_p['motor_connected'][self.axis] and \
+                c_p['connect_motor'][self.axis] and c_p['motor_connected'][self.axis]:
+                # Acquire lock to ensure that it is safe to move the motor
+                c_p['motor_locks'][self.axis].acquire()
+                if np.abs(c_p['motor_movements'][self.axis])>0:
+                        # The movement limit must be positive
+                        c_p['xy_movement_limit'] = np.abs(c_p['xy_movement_limit'])
+                        # Check how much the motor is allowed to move
 
-            if np.abs(c_p['motor_movements'][self.axis])>0:
-                    # The movement limit must be positive
-                    c_p['xy_movement_limit'] = np.abs(c_p['xy_movement_limit'])
-                    # Check how much the motor is allowed to move
-
-                    if np.abs(c_p['motor_movements'][self.axis])<=c_p['xy_movement_limit']:
-                        TM.MoveMotorPixels(self.motor, c_p['motor_movements'][self.axis])
-                    else:
-                        if c_p['motor_movements'][self.axis]>0:
-                            TM.MoveMotorPixels(self.motor, c_p['xy_movement_limit'])
+                        if np.abs(c_p['motor_movements'][self.axis])<=c_p['xy_movement_limit']:
+                            TM.MoveMotorPixels(self.motor, c_p['motor_movements'][self.axis])
                         else:
-                            TM.MoveMotorPixels(self.motor, -c_p['xy_movement_limit'])
-                    c_p['motor_movements'][self.axis] = 0
-            c_p['motor_current_pos'][self.axis] = float(str(self.motor.Position))
-            c_p['motor_locks'][self.axis].release()
+                            if c_p['motor_movements'][self.axis]>0:
+                                TM.MoveMotorPixels(self.motor, c_p['xy_movement_limit'])
+                            else:
+                                TM.MoveMotorPixels(self.motor, -c_p['xy_movement_limit'])
+                        c_p['motor_movements'][self.axis] = 0
+                c_p['motor_current_pos'][self.axis] = float(str(self.motor.Position))
+                c_p['motor_locks'][self.axis].release()
+            # Motor is connected but should be disconnected
+            elif c_p['motor_connected'][self.axis] and not c_p['connect_motor'][self.axis]:
+                TM.DisconnectMotor(self.motor)
+                c_p['motor_connected'][self.axis] = False
+                self.motor = None
+            # Motor is not connected but should be
+            elif not c_p['motor_connected'][self.axis] and c_p['connect_motor'][self.axis]:
+                self.motor = TM.InitiateMotor(c_p['serial_nums_motors'][self.axis],
+                  pollingRate=c_p['polling_rate'])
+                # Check if motor was successfully connected.
+                if self.motor is not None:
+                    c_p['motor_connected'][self.axis] = True
+                else:
+                    motor_ = 'x' if self.axis == 0 else 'y'
+                    print('Failed to connect motor '+motor_)
             time.sleep(0.1) # To give other threads some time to work
-
-       TM.DisconnectMotor(self.motor)
+        if c_p['motor_connected'][self.axis]:
+            TM.DisconnectMotor(self.motor)
 
 
 def compensate_focus():
@@ -2056,15 +2114,6 @@ experiment_schedule = [
 
 ]
 
-# {'xm':[-30e-6, -45e-6, -60e-6, -30e-6, -45e-6, -60e-6, -30e-6, -45e-6, -60e-6],
-# 'ym':[-30e-6, -30e-6, -30e-6, -45e-6, -45e-6, -45e-6, -60e-6, -60e-6, -60e-6],
-# 'use_LGO':[False]},
-# {'xm':[-30e-6, -50e-6, -70e-6, -30e-6, -50e-6, -70e-6, -30e-6, -50e-6, -70e-6],
-# 'ym':[-30e-6, -30e-6, -30e-6, -50e-6, -50e-6, -50e-6, -70e-6, -70e-6, -70e-6],
-# 'use_LGO':[False]},
-# {'xm':[-30e-6, -55e-6, -80e-6, -30e-6, -45e-6, -60e-6, -30e-6, -45e-6, -60e-6],
-# 'ym':[-30e-6, -30e-6, -30e-6, -45e-6, -45e-6, -45e-6, -60e-6, -60e-6, -60e-6],
-# 'use_LGO':[False]},
 c_p['experiment_schedule'] = experiment_schedule
 T_D = UserInterface(tkinter.Tk(), "Control display")
 

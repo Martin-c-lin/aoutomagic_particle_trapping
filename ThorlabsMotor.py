@@ -213,6 +213,7 @@ def InitiateMotor(serialNumber, pollingRate=250, DeviceSettingsName='Z812'):
                 print("Cannot connect to device.\n Please ensure that the \
                       device is connected to your computer and not in use in \
                           any other program!")
+                return None
     motor.WaitForSettingsInitialized(5000)
     # configure the stage
     motorSettings = motor.LoadMotorConfiguration(serialNumber)
