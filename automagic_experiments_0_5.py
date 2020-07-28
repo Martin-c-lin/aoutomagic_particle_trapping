@@ -83,7 +83,7 @@ def get_default_c_p(recording_path=None):
         # needed for z-compensation
         'motor_current_pos': [0, 0, 0],  # Current position of x-y motors,
         # needed for z-compensation, z is the last
-        'motor_connected':[False, False, False],
+        'motors_connected':[False, False, False],
         'connect_motor':[True, True, True],
         'z_starting_position': 0,  # Where the experiments starts in z position
         'z_movement': 0,  # Target z-movement in "ticks" positive for up,
@@ -620,6 +620,9 @@ class UserInterface:
         def connect_disconnect_motorY():
             c_p['connect_motor'][1] = not c_p['connect_motor'][1]
 
+        def connect_disconnect_piezo():
+            c_p['connect_motor'][2] = not c_p['connect_motor'][2]
+
         threshold_button = tkinter.Button(
             top, text='Set threshold', command=set_threshold)
         focus_up_button = tkinter.Button(
@@ -643,6 +646,8 @@ class UserInterface:
             top, text='Connect motor x', command=connect_disconnect_motorX)
         self.toggle_motorY_button = tkinter.Button(
             top, text='Connect motor y', command=connect_disconnect_motorY)
+        self.toggle_piezo_button = tkinter.Button(
+            top, text='Connect piezo motor', command=connect_disconnect_piezo)
 
         x_position = 1220
         x_position_2 = 1420
@@ -674,6 +679,7 @@ class UserInterface:
         experiment_schedule_button.place(x=x_position_2, y=y_position_2.__next__())
         self.toggle_motorX_button.place(x=x_position_2, y=y_position_2.__next__())
         self.toggle_motorY_button.place(x=x_position_2, y=y_position_2.__next__())
+        self.toggle_piezo_button.place(x=x_position_2, y=y_position_2.__next__())
 
     def create_SLM_window(self, _class):
         try:
@@ -709,6 +715,7 @@ class UserInterface:
         return temperature_info
 
     def get_position_info(self):
+
         global c_p
         # Add position info
         position_text = 'x: '+str(c_p['motor_current_pos'][0])+\
@@ -718,12 +725,26 @@ class UserInterface:
         position_text += ' out of ' + str(c_p['nbr_experiments'])
         position_text += '  ' + str(c_p['experiment_runtime']) + 's run out of ' + str(c_p['recording_duration'])
         position_text += '\n Current search direction is: ' + str(c_p['search_direction'] + '\n')
+
         # Add motor connection info
-        x_connected = 'connected. ' if c_p['motor_connected'][0] else 'disconnected.'
-        y_connected = 'connected. ' if c_p['motor_connected'][1] else 'disconnected.'
-        position_text += 'Motor x is ' + x_connected
-        position_text += ' Motor y is ' + y_connected + '\n'
+        x_connected = 'connected. ' if c_p['motors_connected'][0] else 'disconnected.'
+        y_connected = 'connected. ' if c_p['motors_connected'][1] else 'disconnected.'
+        piezo_connected = 'connected. ' if c_p['motors_connected'][2] else 'disconnected.'
+
+        position_text += 'Motor-X is ' + x_connected
+        position_text += ' Motor-Y is ' + y_connected + '\n'
+        position_text += ' Focus (piezo) motor is ' + piezo_connected + '\n'
+
         return position_text
+
+    def update_motor_buttons(self):
+        # Motor connection buttons
+        x_connect = 'Disconnect' if c_p['connect_motor'][0] else 'Connect'
+        self.toggle_motorX_button.config(text=x_connect + ' motor x')
+        y_connect = 'Disconnect' if c_p['connect_motor'][1] else 'Connect'
+        self.toggle_motorY_button.config(text=y_connect + ' motor y')
+        piezo_connected = 'Disconnect' if c_p['connect_motor'][2] else 'Connect'
+        self.toggle_piezo_button.config(text=piezo_connected + ' piezo motor')
 
     def create_indicators(self):
         global c_p
@@ -768,14 +789,9 @@ class UserInterface:
 
         self.temperature_label.config(text=self.get_temperature_info())
 
-
         self.position_label.config(text=self.get_position_info())
 
-        # Motor connection buttons
-        x_connect = 'Disconnect' if c_p['connect_motor'][0] else 'Connect'
-        self.toggle_motorX_button.config(text=x_connect + ' motor x')
-        y_connect = 'Disconnect' if c_p['connect_motor'][1] else 'Connect'
-        self.toggle_motorY_button.config(text=y_connect + ' motor y')
+        self.update_motor_buttons()
 
     def resize_display_image(self, img):
         img_size = np.shape(img)
@@ -820,7 +836,6 @@ class SLM_window(Frame):
         self.img = Label(self, image=render)
         self.img.place(x=420, y=0)
         self.img.image = image
-        ####
         self.delay = 500
         self.update()
 
@@ -837,8 +852,8 @@ class MotorThread(threading.Thread):
     '''
     Thread in which a motor is controlled. The motor object is available globally.
     '''
-    # TODO - Make it possible to connect and disconnect motors without restarting
-    # the program. Try removing the treadlocks on the motors.
+    # TODO: Try removing the treadlocks on the motors.
+    # Try replacing some of the c_p with events.
     def __init__(self, threadID, name, axis):
 
       threading.Thread.__init__(self)
@@ -858,9 +873,9 @@ class MotorThread(threading.Thread):
       if self.motor is not None:
           c_p['motor_starting_pos'][self.axis] = float(str(self.motor.Position))
           print('Motor is at ', c_p['motor_starting_pos'][self.axis])
-          c_p['motor_connected'][self.axis] = True
+          c_p['motors_connected'][self.axis] = True
       else:
-          c_p['motor_connected'][self.axis] = False
+          c_p['motors_connected'][self.axis] = False
       self.setDaemon(True)
 
     def run(self):
@@ -868,11 +883,11 @@ class MotorThread(threading.Thread):
         global c_p
         while c_p['motor_running']:
             # If motor connected and it should be connected, check for next move
-            if c_p['motor_connected'][self.axis] and \
-                c_p['connect_motor'][self.axis] and c_p['motor_connected'][self.axis]:
+            if c_p['motors_connected'][self.axis] and \
+                c_p['connect_motor'][self.axis] and c_p['motors_connected'][self.axis]:
                 # Acquire lock to ensure that it is safe to move the motor
-                c_p['motor_locks'][self.axis].acquire()
-                if np.abs(c_p['motor_movements'][self.axis])>0:
+                with c_p['motor_locks'][self.axis]:
+                    if np.abs(c_p['motor_movements'][self.axis])>0:
                         # The movement limit must be positive
                         c_p['xy_movement_limit'] = np.abs(c_p['xy_movement_limit'])
                         # Check how much the motor is allowed to move
@@ -885,25 +900,24 @@ class MotorThread(threading.Thread):
                             else:
                                 TM.MoveMotorPixels(self.motor, -c_p['xy_movement_limit'])
                         c_p['motor_movements'][self.axis] = 0
-                c_p['motor_current_pos'][self.axis] = float(str(self.motor.Position))
-                c_p['motor_locks'][self.axis].release()
+                    c_p['motor_current_pos'][self.axis] = float(str(self.motor.Position))
             # Motor is connected but should be disconnected
-            elif c_p['motor_connected'][self.axis] and not c_p['connect_motor'][self.axis]:
+            elif c_p['motors_connected'][self.axis] and not c_p['connect_motor'][self.axis]:
                 TM.DisconnectMotor(self.motor)
-                c_p['motor_connected'][self.axis] = False
+                c_p['motors_connected'][self.axis] = False
                 self.motor = None
             # Motor is not connected but should be
-            elif not c_p['motor_connected'][self.axis] and c_p['connect_motor'][self.axis]:
+            elif not c_p['motors_connected'][self.axis] and c_p['connect_motor'][self.axis]:
                 self.motor = TM.InitiateMotor(c_p['serial_nums_motors'][self.axis],
                   pollingRate=c_p['polling_rate'])
                 # Check if motor was successfully connected.
                 if self.motor is not None:
-                    c_p['motor_connected'][self.axis] = True
+                    c_p['motors_connected'][self.axis] = True
                 else:
                     motor_ = 'x' if self.axis == 0 else 'y'
                     print('Failed to connect motor '+motor_)
             time.sleep(0.1) # To give other threads some time to work
-        if c_p['motor_connected'][self.axis]:
+        if c_p['motors_connected'][self.axis]:
             TM.DisconnectMotor(self.motor)
 
 
@@ -931,47 +945,48 @@ class z_movement_thread(threading.Thread):
         self.threadID = threadID
         self.name = name
         self.piezo = TM.PiezoMotor(serial_no, channel=channel, pollingRate=polling_rate)
-        c_p['z_starting_position'] = self.piezo.get_position()
+        if self.piezo.is_connected:
+            c_p['z_starting_position'] = self.piezo.get_position()
+            c_p['motor_current_pos'][2] = self.piezo.get_position()
+            c_p['motors_connected'][2] = self.piezo.is_connected
         self.setDaemon(True)
-
-
-    # def compensate_focus(self):
-    #     '''
-    #     Function for compensating the change in focus caused by x-y movement.
-    #     '''
-    #     global c_p
-    #     new_z_pos = (c_p['z_starting_position']
-    #         +c_p['z_x_diff']*(c_p['motor_starting_pos'][0] - c_p['motor_current_pos'][0])
-    #         +c_p['z_y_diff']*(c_p['motor_starting_pos'][1] - c_p['motor_current_pos'][1]) )
-    #     new_z_pos += c_p['temperature_z_diff']*(c_p['current_temperature']-c_p['starting_temperature'])
-    #     return int(new_z_pos)
 
     def run(self):
         global c_p
         lifting_distance = 0
-        c_p['motor_current_pos'][2] = self.piezo.get_position()
         while c_p['program_running']:
+            c_p['motors_connected'][2] = self.piezo.is_connected
 
-            # Check if the objective should be moved
-            self.piezo.move_to_position(compensate_focus()+lifting_distance)
+            # Check if piezo connected and should be connected
+            if self.piezo.is_connected and c_p['connect_motor'][2]:
 
-            if c_p['z_movement'] is not 0:
-                    c_p['z_movement'] = int(c_p['z_movement'])
-                    # Move up if we are not already up
-                    # print("Trying to lift particles")
-                    if self.piezo.move_relative(c_p['z_movement']):
-                        lifting_distance += c_p['z_movement']
+                # Check if the objective should be moved
+                self.piezo.move_to_position(compensate_focus()+lifting_distance)
 
-                    c_p['z_movement'] = 0
+                if c_p['z_movement'] is not 0:
+                        c_p['z_movement'] = int(c_p['z_movement'])
+                        # Move up if we are not already up
+                        if self.piezo.move_relative(c_p['z_movement']):
+                            lifting_distance += c_p['z_movement']
+                        c_p['z_movement'] = 0
 
-            elif c_p['return_z_home'] and c_p['motor_current_pos'][2]>compensate_focus():
+                elif c_p['return_z_home'] and c_p['motor_current_pos'][2]>compensate_focus():
+                    lifting_distance -= min(40,c_p['motor_current_pos'][2]-compensate_focus())
+                    # Compensating for hysteresis effect in movement
+                    print('homing z')
+                if c_p['motor_current_pos'][2]<=compensate_focus() or c_p['z_movement'] != 0:
+                    c_p['return_z_home'] = False
+                if self.piezo.is_connected:
+                    c_p['motor_current_pos'][2] = self.piezo.get_position()
 
-                lifting_distance -= min(40,c_p['motor_current_pos'][2]-compensate_focus())
-                # Compensating for hysteresis effect in movement
-                print('homing z')
-            if c_p['motor_current_pos'][2]<=compensate_focus() or c_p['z_movement'] != 0:
-                c_p['return_z_home'] = False
-            c_p['motor_current_pos'][2] = self.piezo.get_position()
+            # Piezomotor not connected but should be
+            elif not self.piezo.is_connected and c_p['connect_motor'][2]:
+                self.piezo.connect_piezo_motor()
+
+            # Piezo motor connected but should not be
+            elif self.piezo.is_connected and not c_p['connect_motor'][2]:
+                self.piezo.disconnect_piezo()
+
             time.sleep(0.3)
         del(self.piezo)
 
@@ -996,11 +1011,13 @@ class CameraThread(threading.Thread):
           self.cam.Open()
           image = np.zeros((672,512,1))
       self.setDaemon(True)
+
    def __del__(self):
         if c_p['camera_model'] == 'basler':
             self.cam.Close()
         else:
             self.cam.close()
+
    def get_important_parameters(self):
        global c_p
        parameter_dict = {
@@ -1235,8 +1252,6 @@ class ExperimentControlThread(threading.Thread):
           else:
               c_p['motor_movements'][0] = -(c_p['target_trap_pos'][0] - c_p['target_particle_center'][0]) # Note: Sign of this depends on setup
               c_p['motor_movements'][1] = c_p['target_trap_pos'][1] - c_p['target_particle_center'][1]
-          # print('Moving to ', c_p['motor_movements'])
-          # print('Particle at ', c_p['target_particle_center'] )
 
         else:
             c_p['target_particle_center'] = []

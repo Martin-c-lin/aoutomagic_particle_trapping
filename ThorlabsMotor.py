@@ -24,9 +24,16 @@ class PiezoMotor():
     '''
 
     def __init__(self, serialNumber, channel, pollingRate=250, timeout=10000):
-        self.motor = InitiatePiezoMotor(serialNumber, pollingRate)
+        self.serial_number = serialNumber
+        self.polling_rate = pollingRate
+        self.connect_piezo_motor()
         self.channel = channel
         self.timeout = timeout
+
+    def connect_piezo_motor(self):
+        self.motor = InitiatePiezoMotor(self.serial_number, self.polling_rate)
+        self.is_connected = True if not self.motor is None else False
+
     def move_to_position(self, position):
         '''
         Function for moving the motor to a specified position
@@ -45,9 +52,10 @@ class PiezoMotor():
         try:
             self.motor.MoveTo(self.channel, position, self.timeout)
             return True
-        except:  # TODO put in what error to except (timeout I think)
-            print('Could not move to target position')
+        except:
+            print('Could not move piezo to target position')
             return False
+
     def set_timeout(self, timeout):
         '''
         Function for setting the timeout of the piezo motor
@@ -107,12 +115,25 @@ class PiezoMotor():
             Current position of piezo(in ticks).
 
         '''
-        return self.motor.GetPosition(self.channel)
+        try:
+            return self.motor.GetPosition(self.channel)
+        except:
+            print('Could not find piezo position')
+            return 0
+
+    def disconnect_piezo(self):
+        if self.is_connected:
+            self.motor.StopPolling()
+            self.motor.Disconnect()
+            self.is_connected = False
 
     def __del__(self):
-        self.motor.StopPolling()
-        self.motor.Disconnect()
-def InitiatePiezoMotor(serialNumber,pollingRate=250):
+        self.disconnect_piezo()
+        # self.motor.StopPolling()
+        # self.motor.Disconnect()
+
+
+def InitiatePiezoMotor(serialNumber, pollingRate=250):
     '''
     Function for initalizing a piezo motor.
 
@@ -138,12 +159,13 @@ def InitiatePiezoMotor(serialNumber,pollingRate=250):
         except:
             print("Connection attempt", attempts, "failed")
             if attempts < 2:
-                print("Will wait 5 seconds and try again")
-                sleep(5)
+                print("Will wait 2 seconds and try again")
+                sleep(2)
             else:
                 print("Cannot connect to device.\n Please ensure that the \
                       device is connected to your computer and not in use in\
                           any other program!")
+                return None
     motor.WaitForSettingsInitialized(5000)
     # configure the stage
     motorSettings = motor.GetInertialMotorConfiguration(serialNumber)
@@ -159,6 +181,8 @@ def InitiatePiezoMotor(serialNumber,pollingRate=250):
     motor.EnableDevice()
 
     return motor
+
+
 class StageMotor():
     '''
     Class for the motors used by the stage. Class currently not in use
@@ -207,8 +231,8 @@ def InitiateMotor(serialNumber, pollingRate=250, DeviceSettingsName='Z812'):
         except:
             print("Connection attempt", attempts, "failed")
             if attempts < 2:
-                print("Will wait 5 seconds and try again")
-                sleep(5)
+                print("Will wait 2 seconds and try again")
+                sleep(2)
             else:
                 print("Cannot connect to device.\n Please ensure that the \
                       device is connected to your computer and not in use in \
