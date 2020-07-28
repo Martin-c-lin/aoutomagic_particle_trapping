@@ -129,8 +129,6 @@ class PiezoMotor():
 
     def __del__(self):
         self.disconnect_piezo()
-        # self.motor.StopPolling()
-        # self.motor.Disconnect()
 
 
 def InitiatePiezoMotor(serialNumber, pollingRate=250):
@@ -187,15 +185,130 @@ class StageMotor():
     '''
     Class for the motors used by the stage. Class currently not in use
     '''
-    def __init__(self,serialNumber,pollingRate=200,mmToPixel=16140):
-        self.motor = InitiateMotor(serialNumber,pollingRate)
-        self.startingPosition = self.motor.GetPosition()
+    def __init__(self, serialNumber, pollingRate=200, mmToPixel=16140,timeoutVal=30000):
+        self.serialNumber = serialNumber
+        self.pollingRate = pollingRate
+        self.timeoutVal = timeoutVal
+        self.connect_motor()
         self.mmToPixel = mmToPixel
+
     def SetJogSpeed(self,jogSpeed,jogAcc=0.1):
         try:
             self.motor.SetJogVelocityParams(Decimal(jogSpeed),Decimal(jogAcc))
         except:
             print('Could not set jog speed.')
+
+    def connect_motor(self):
+        self.motor = InitiateMotor(self.serialNumber, self.pollingRate)
+        self.is_connected = False if self.motor is None else True
+        if self.is_connected:
+            self.startingPosition = self.motor.GetPosition()
+        else:
+            self.startingPosition = 0
+
+    def disconnect_motor(self):
+        if self.is_connected:
+            motor.StopPolling()
+            motor.Disconnect()
+            self.is_connected = False
+
+    def MoveMotor(self, distance):
+        '''
+        Helper function for moving a motor.
+
+        Parameters
+        ----------
+        motor : thorlabs motor
+            Motor to be moved.
+        distance : float
+            Distance to move the motor.
+
+        Returns
+        -------
+        bool
+            True if the move was a success, otherwise false.
+
+        '''
+        if not self.is_connected:
+            return False
+
+        if distance > 0.1 or distance < -0.1:
+            print("Trying to move too far")
+            return False
+        # For unknown reason python thinks one first must convert to float but
+        # only when running from console...
+        self.motor.SetJogStepSize(Decimal(float(distance)))
+        try:
+            motor.MoveJog(1, timeoutVal)# Jog in forward direction
+        except:
+            print( "Trying to move motor to NOK position")
+            return False
+        return True
+    def MoveMotorPixels(self, distance):
+        # TODO - check if the mmToPixel value is valid for the basler camera.
+        '''
+        Moves motor a specified number of pixels.
+
+        Parameters
+        ----------
+        motor : TYPE - thorlabs motor
+             Motor to be moved
+        distance : TYPE number
+             Distance to move the motor
+        mmToPixel : TYPE number for converting from mm(motor units) to pixels, optional
+             The default is 16140, valid for our 100x objective and setup.
+
+        Returns
+        -------
+        bool
+            True if move was successfull, false otherwise.
+        '''
+        self.motor.SetJogStepSize(Decimal(float(distance/self.mmToPixel)))
+        try:
+            self.motor.MoveJog(1, timeoutVal)  # Jog in forward direction
+        except:
+            print( "Trying to move motor to NOK position")
+            return False
+        return True
+
+
+    def MoveMotorToPixel(self, targetPixel, currentPixel, maxPixel=1280):
+        '''
+
+        Parameters
+        ----------
+        motor : TYPE
+            DESCRIPTION.
+        targetPixel : TYPE
+            DESCRIPTION.
+        currentPixel : TYPE
+            DESCRIPTION.
+        maxPixel : TYPE, optional
+            DESCRIPTION. The default is 1280.
+        mmToPixel : TYPE, optional
+            DESCRIPTION. The default is 16140.
+
+        Returns
+        -------
+        bool
+            DESCRIPTION.
+
+        '''
+        if(targetPixel < 0 or targetPixel > maxPixel): # Fix correct boundries
+            print("Target pixel outside of bounds")
+            return False
+        if not self.is_connected:
+            return False
+        # There should be a minus here, this is due to the setup
+        dx = -(targetPixel-currentPixel)/self.mmToPixel
+        self.motor.SetJogStepSize(Decimal(float(dx)))
+        try:
+            self.motor.MoveJog(1,timeoutVal)# Jog in forward direction
+        except:
+            print( "Trying to move motor to NOK position")
+            return False
+        return True
+
     def __del__(self):
         self.motor.StopPolling()
         self.motor.Disconnect()
@@ -306,6 +419,7 @@ def MoveMotor(motor, distance):
 
 
 def MoveMotorPixels(motor, distance, mmToPixel=16140):
+    # TODO - check if the mmToPixel value is valid for the basler camera.
     '''
     Moves motor a specified number of pixels.
 
