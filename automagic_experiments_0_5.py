@@ -40,6 +40,8 @@ def get_default_c_p(recording_path=None):
     # TODO : Consider to change this into a class.
     # Make this object possible to pickle and unpickle to make it easier to
     # reuse settings.
+    # TODO: Change so that xm, ym are in pixels rather than the arbitrary
+    # units they use now.
     if recording_path is None:
         recording_path = get_recording_path()
     c_p = {
@@ -2033,6 +2035,15 @@ def update_traps_relative_pos():
     c_p['traps_relative_pos'] = tmp
 
 
+def trap_to_SLM_loc(xm, ym):
+    '''
+    Function for converting from PIXELS to SLM locations.
+    '''
+    global c_p
+    c_p['xm'] = [(x - c_p['slm_x_center']) / c_p['slm_to_pixel'] for x in xm]
+    c_p['ym'] = [(y - c_p['slm_y_center']) / c_p['slm_to_pixel'] for y in ym]
+
+
 def SLM_loc_to_trap_loc(xm, ym):
     '''
     Fucntion for updating the traps position based on their locaitons
@@ -2095,7 +2106,7 @@ d0y = -80e-6
 
 # Define experiment to be run
 
-xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=3, nbr_columns=3, d0x=d0x, d0y=d0y, dx=20e-6, dy=20e-6,)
+xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=2, nbr_columns=1, d0x=d0x, d0y=d0y, dx=20e-6, dy=20e-6,)
 # xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=12e-6, dy=20e-6,)
 # xm3, ym3 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=14e-6, dy=20e-6,)
 # xm4, ym4 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=16e-6, dy=20e-6,)
