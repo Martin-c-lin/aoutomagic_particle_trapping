@@ -1610,6 +1610,12 @@ def update_c_p(update_dict, wait_for_completion=True):
     for key in update_dict:
         if key in ok_parameters:
             try:
+                # TODO: Test that this works
+                if key == 'xm' and min(update_dict[key]) < 1:
+                    update_dict[key] = pixel_to_SLM_loc(update_dict[key],0)
+                if key == 'ym' and min(update_dict[key]) < 1:
+                    update_dict[key] = pixel_to_SLM_loc(update_dict[key],1)
+
                 c_p[key] = update_dict[key]
             except:
                 print('Could not update control parameter ', key, 'with value',
@@ -2035,14 +2041,17 @@ def update_traps_relative_pos():
     c_p['traps_relative_pos'] = tmp
 
 
-def trap_to_SLM_loc(xm, ym):
+def pixel_to_SLM_loc(locs, axis):
     '''
     Function for converting from PIXELS to SLM locations.
     '''
     global c_p
-    c_p['xm'] = [(x - c_p['slm_x_center']) / c_p['slm_to_pixel'] for x in xm]
-    c_p['ym'] = [(y - c_p['slm_y_center']) / c_p['slm_to_pixel'] for y in ym]
-
+    if axis ~= 0 and axis ~= 1:
+        print('cannot perform conversion, incorrect choice of axis')
+        return locs
+    offset = c_p['slm_x_center'] if not axis else c_p['slm_y_center']
+    new_locs = [(x - offset) / c_p['slm_to_pixel'] for x in locs]
+    return new_locs
 
 def SLM_loc_to_trap_loc(xm, ym):
     '''
