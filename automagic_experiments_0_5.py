@@ -1155,6 +1155,8 @@ class CameraThread(threading.Thread):
           c_p['new_AOI_camera'] = False
           try:
               self.cam.ExposureTime = c_p['exposure_time']
+              c_p['framerate'] = self.cam.ResultingFrameRate.GetValue()
+              print('Read framerate to ', c_p['framerate'], ' fps.')
           except:
               print('Exposure time not accepted by camera')
           # Grab one example image
@@ -1611,12 +1613,14 @@ def update_c_p(update_dict, wait_for_completion=True):
         if key in ok_parameters:
             try:
                 # TODO: Test that this works
-                if key == 'xm' and min(update_dict[key]) < 1:
-                    update_dict[key] = pixel_to_SLM_loc(update_dict[key],0)
-                if key == 'ym' and min(update_dict[key]) < 1:
-                    update_dict[key] = pixel_to_SLM_loc(update_dict[key],1)
-
-                c_p[key] = update_dict[key]
+                if key == 'xm' and min(update_dict[key]) > 1:
+                    c_p[key] = pixel_to_SLM_loc(update_dict[key], 0)
+                    print('xm' ,update_dict[key])
+                elif key == 'ym' and min(update_dict[key]) > 1:
+                    c_p[key] = pixel_to_SLM_loc(update_dict[key], 1)
+                    print('ym ',update_dict[key])
+                else:
+                    c_p[key] = update_dict[key]
             except:
                 print('Could not update control parameter ', key, 'with value',
                 value)
@@ -2046,11 +2050,11 @@ def pixel_to_SLM_loc(locs, axis):
     Function for converting from PIXELS to SLM locations.
     '''
     global c_p
-    if axis ~= 0 and axis ~= 1:
+    if axis != 0 and axis != 1:
         print('cannot perform conversion, incorrect choice of axis')
         return locs
     offset = c_p['slm_x_center'] if not axis else c_p['slm_y_center']
-    new_locs = [(x - offset) / c_p['slm_to_pixel'] for x in locs]
+    new_locs = [((x - offset) / c_p['slm_to_pixel']) for x in locs]
     return new_locs
 
 def SLM_loc_to_trap_loc(xm, ym):
