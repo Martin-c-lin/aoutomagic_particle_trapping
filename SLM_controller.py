@@ -433,8 +433,11 @@ class SLM_window(Frame):
         self.img.image = self.photo
         self.img.place(x=420, y=0) # Do not think this is needed
 
-<<<<<<< HEAD
-=======
+
+def recalculate_mask():
+    c_p['new_phasemask'] = True
+
+
 def pixels_to_SLM_locs(locs, axis):
     return [pixel_to_SLM_loc(x, axis) for x in locs]
 
@@ -448,11 +451,6 @@ def pixel_to_SLM_loc(loc, axis):
         return locs
     offset = c_p['slm_x_center'] if not axis else c_p['slm_y_center']
     return (loc - offset) / c_p['slm_to_pixel']
->>>>>>> 5c3600c8026077257ae46e28b74b1208fcdf2eb4
-
-def recalculate_mask():
-    c_p['new_phasemask'] = True
-
 
 def SLM_loc_to_trap_loc(xm, ym):
     '''
