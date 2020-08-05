@@ -11,7 +11,7 @@ import SLM
 
 
 def get_default_c_p(
-    SLM_iterations = 30,
+    SLM_iterations = 2,
     phasemask_width = 1080,
     phasemask_height = 1080,
     ):
@@ -37,12 +37,15 @@ def get_default_c_p(
         'slm_y_center': 605,
         'slm_to_pixel':5000000, # Basler
         #4550000.0, #thorlabs
+        'x_comp':3.2e4,
+        'y_comp':9e4,
         'dx':20e-6,
         'dy':20e-6,
-        'nbr_SLM_rows':2,
+        'nbr_SLM_rows':1,
         'nbr_SLM_columns':1,
         'use_LGO':[True],
         'LGO_order':-8,
+
         # TODO add display option for traps locations
     }
     c_p['phasemask'] = np.zeros((c_p['phasemask_height'],c_p['phasemask_width']))
@@ -116,13 +119,15 @@ class CreateSLMThread(threading.Thread):
         while c_p['experiment_running']:
             if c_p['new_phasemask']:
                 # Calcualte new delta and phasemask
-                c_p['zm'] = np.ones(len(c_p['xm'])) * c_p['d0z']
                 self.update_xm_ym()
+                c_p['zm'] = np.ones(len(c_p['xm'])) * c_p['d0z']
                 Delta,N,M = SLM.get_delta(xm=c_p['xm'],
                     ym=c_p['ym'],
                     zm=c_p['zm'],
                     use_LGO=c_p['use_LGO'],
-                    order=c_p['LGO_order'])
+                    order=c_p['LGO_order'],
+                    x_comp=c_p['x_comp'],
+                    y_comp=c_p['y_comp'])
                 self.generate_phasemask(Delta,N,M)
 
                 # Let the other threads know that a new phasemask has been calculated
@@ -290,7 +295,7 @@ class TkinterDisplay:
         set_SLM_columns = lambda : update_from_entry(nbr_trap_columns_entry, type='int', key='nbr_SLM_columns',bounds=[0,1000])
         set_d0x = lambda : update_from_entry(d0x_entry, type='float', key='d0x', bounds=[1, 1280], scale=1)# bounds=[-200, 200], scale=1e-6)
         set_d0y = lambda : update_from_entry(d0y_entry, type='float', key='d0y', bounds=[1, 1080], scale=1)
-        set_d0z = lambda : update_from_entry(d0z_entry, type='float', key='d0z', bounds=[-200, 200], scale=1e-9)
+        set_d0z = lambda : update_from_entry(d0z_entry, type='float', key='d0z', bounds=[-200, 200], scale=1e-10)
         set_LGO_order = lambda : update_from_entry(LGO_order_entry, type='int', key='LGO_order', bounds=[-200, 200], scale=1)
 
         SLM_Iterations_button = tkinter.Button(self.window, text ='Set SLM iterations', command = set_iterations)
@@ -372,8 +377,8 @@ class TkinterDisplay:
             position_text += '\n Using Weighted Grechbgerg-Saxton algorithm'
         self.position_label.config(text=position_text)
 
-        setup_text = 'xms are : ' + str(c_p['xm'])
-        setup_text += '\n yms are : ' + str(c_p['ym'])
+        setup_text = 'xms are : ' + str(c_p['traps_absolute_pos'][0])
+        setup_text += '\n yms are : ' + str(c_p['traps_absolute_pos'][1]) #c_p['ym'])
         setup_text += '\n LGO order set to: ' +str(c_p['LGO_order'])
         self.info_label.config(text=setup_text)
 
@@ -388,6 +393,7 @@ class TkinterDisplay:
         else:
             dim = ( int(self.canvas_height),int(self.canvas_height/img_size[0]*img_size[1]))
         return cv2.resize(img, (dim[1],dim[0]), interpolation = cv2.INTER_AREA)
+
     def update(self):
          # Get a frame from the video source
          self.update_indicators()

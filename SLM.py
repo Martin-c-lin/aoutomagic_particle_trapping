@@ -242,7 +242,16 @@ def get_Isaac_xm_ym(d=30e-6, d0x=-115e-6, d0y=-115e-6):
     return xm, ym
 
 
-def get_delta(image_width = 1080, xm=[], ym=[], zm=None, use_LGO=[False], order=-8):
+def compensate_z(xm, ym, zm, x_comp, y_comp):
+    # Function for compensating shift in lateral positon of beam due to changes
+    # in z.
+    xm = [x-x_comp*z for x,z in zip(xm, zm)]
+    ym = [y-y_comp*z for y,z in zip(ym, zm)]
+    return xm, ym
+
+
+def get_delta(image_width = 1080, xm=[], ym=[], zm=None, use_LGO=[False], order=-8,
+    x_comp=None, y_comp=None):
     """
     Calculates delta in paper. I.e the phase shift of light when travelling from
     the SLM to the trap position for a specific set of points
@@ -256,7 +265,7 @@ def get_delta(image_width = 1080, xm=[], ym=[], zm=None, use_LGO=[False], order=
     p = 9e-6 # pixel size
     f = np.sqrt(2e-4*0.4) # Focal length of imaging system. Empirically found value
     z = 0
-    lambda_ = 532e-9
+    lambda_ = 532e-9 # Laser wavelength
 
     if len(xm)<1 or len(ym)<1:
         xm,ym = get_default_xm_ym()
@@ -265,8 +274,14 @@ def get_delta(image_width = 1080, xm=[], ym=[], zm=None, use_LGO=[False], order=
     if True in use_LGO:
         LGO = get_LGO(image_width,order=order)
     M = len(xm) # Total number of traps
+
+    # Initiate zm if not provided by user.
     if zm is None:
         zm = np.zeros((M))
+    # Compensate for shift in x-y plane when changing z
+    elif x_comp is not None:
+        xm, ym = compensate_z(xm, ym, zm, x_comp, y_comp)
+        print('compensated')
     Delta=np.zeros((M,N))
     for m in range(M):
 
@@ -276,8 +291,6 @@ def get_delta(image_width = 1080, xm=[], ym=[], zm=None, use_LGO=[False], order=
         if len(use_LGO)>m and use_LGO[m]:
             Delta[m,:] += np.reshape(LGO,(N))
             Delta[m,:] = Delta[m,:] % (2*pi)
-        # TODO Add possibility to adjust for lateral movement of beam when
-        # using zm != 0. Will require calibration parameters.
     return Delta, N, M
 
 
