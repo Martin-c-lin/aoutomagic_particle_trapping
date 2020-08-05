@@ -84,13 +84,20 @@ class CreateSLMThread(threading.Thread):
 
     def update_xm_ym(self):
         global c_p
-        c_p['xm'],c_p['ym'] = SLM.get_xm_ym_rect(
+        c_p['xm'], c_p['ym'] = SLM.get_xm_ym_rect(
                 nbr_rows=c_p['nbr_SLM_rows'],
                 nbr_columns=c_p['nbr_SLM_columns'],
                 dx=c_p['dx'],
                 dy=c_p['dy'],
                 d0x=c_p['d0x'],
                 d0y=c_p['d0y'])
+
+        # If units are pixels, then translate to "SLM coordinates"
+        if min(c_p['xm']) >= 1:
+            print(c_p['xm'])
+            c_p['xm'] = pixels_to_SLM_locs(c_p['xm'], 0)
+        if min(c_p['ym']) >= 1:
+            c_p['ym'] = pixels_to_SLM_locs(c_p['ym'], 1)
         SLM_loc_to_trap_loc(c_p['xm'], c_p['ym'])
 
     def run(self):
@@ -130,6 +137,14 @@ class CreateSLMThread(threading.Thread):
         elif c_p['SLM_algorithm'] == 'GS':
             c_p['phasemask'] = SLM.GS(N, M, Delta,
                 nbr_iterations=c_p['SLM_iterations'])
+
+
+    def calculate_trap_position():
+        '''
+        Function for converting trap positions in the phasemask to positions on the
+        screen. Needs  to be calibrated for each setup. Therefore not implemented yet.
+        '''
+        pass
 
 
 class TkinterDisplay:
@@ -268,15 +283,14 @@ class TkinterDisplay:
                 print('Value out of bounds')
 
         set_iterations = lambda : update_from_entry(iterations_entry, type='int', key='SLM_iterations', bounds=[0,1000])
-        set_dx = lambda : update_from_entry(dx_entry, type='float', key='dx', bounds=[0,200],scale=1e-6)
-        set_dy = lambda : update_from_entry(dy_entry, type='float', key='dy', bounds=[0,200],scale=1e-6)
+        set_dx = lambda : update_from_entry(dx_entry, type='float', key='dx', bounds=[0,1200],scale=1)
+        set_dy = lambda : update_from_entry(dy_entry, type='float', key='dy', bounds=[0,1200],scale=1)
 
         set_SLM_rows = lambda : update_from_entry(nbr_trap_rows_entry, type='int', key='nbr_SLM_rows', bounds=[0,1000])
         set_SLM_columns = lambda : update_from_entry(nbr_trap_columns_entry, type='int', key='nbr_SLM_columns',bounds=[0,1000])
-        set_d0x = lambda : update_from_entry(d0x_entry, type='float', key='d0x', bounds=[-200, 200], scale=1e-6)
-        set_d0y = lambda : update_from_entry(d0y_entry, type='float', key='d0y', bounds=[-200, 200], scale=1e-6)
+        set_d0x = lambda : update_from_entry(d0x_entry, type='float', key='d0x', bounds=[1, 1280], scale=1)# bounds=[-200, 200], scale=1e-6)
+        set_d0y = lambda : update_from_entry(d0y_entry, type='float', key='d0y', bounds=[1, 1080], scale=1)
         set_d0z = lambda : update_from_entry(d0z_entry, type='float', key='d0z', bounds=[-200, 200], scale=1e-7)
-
         set_LGO_order = lambda : update_from_entry(LGO_order_entry, type='int', key='LGO_order', bounds=[-200, 200], scale=1)
 
         SLM_Iterations_button = tkinter.Button(self.window, text ='Set SLM iterations', command = set_iterations)
@@ -419,6 +433,22 @@ class SLM_window(Frame):
         self.img.image = self.photo
         self.img.place(x=420, y=0) # Do not think this is needed
 
+<<<<<<< HEAD
+=======
+def pixels_to_SLM_locs(locs, axis):
+    return [pixel_to_SLM_loc(x, axis) for x in locs]
+
+def pixel_to_SLM_loc(loc, axis):
+    '''
+    Function for converting from PIXELS to SLM locations.
+    '''
+    global c_p
+    if axis != 0 and axis != 1:
+        print('cannot perform conversion, incorrect choice of axis')
+        return locs
+    offset = c_p['slm_x_center'] if not axis else c_p['slm_y_center']
+    return (loc - offset) / c_p['slm_to_pixel']
+>>>>>>> 5c3600c8026077257ae46e28b74b1208fcdf2eb4
 
 def recalculate_mask():
     c_p['new_phasemask'] = True
