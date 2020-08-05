@@ -290,7 +290,7 @@ class TkinterDisplay:
         set_SLM_columns = lambda : update_from_entry(nbr_trap_columns_entry, type='int', key='nbr_SLM_columns',bounds=[0,1000])
         set_d0x = lambda : update_from_entry(d0x_entry, type='float', key='d0x', bounds=[1, 1280], scale=1)# bounds=[-200, 200], scale=1e-6)
         set_d0y = lambda : update_from_entry(d0y_entry, type='float', key='d0y', bounds=[1, 1080], scale=1)
-        set_d0z = lambda : update_from_entry(d0z_entry, type='float', key='d0z', bounds=[-200, 200], scale=1e-7)
+        set_d0z = lambda : update_from_entry(d0z_entry, type='float', key='d0z', bounds=[-200, 200], scale=1e-9)
         set_LGO_order = lambda : update_from_entry(LGO_order_entry, type='int', key='LGO_order', bounds=[-200, 200], scale=1)
 
         SLM_Iterations_button = tkinter.Button(self.window, text ='Set SLM iterations', command = set_iterations)

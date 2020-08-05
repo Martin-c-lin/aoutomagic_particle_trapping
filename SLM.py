@@ -4,7 +4,7 @@ from math import ceil,pi
 from random import random
 from time import time
 from math import atan2
-# TODO make all this into functions and investigate if we can change to smaller
+# TODO: investigate if we can change to smaller
 # datatypes to improve performance
 # See if smaller datatypes and upscaling can be used to improve performance
 
@@ -38,6 +38,7 @@ def atan2_vec_2d(Y, X):
         print('Error, vectors not of equal length', len(X),' is not equal to ',len(Y))
         return None
 
+
 def get_LGO(image_width=1080, order=-8):
     '''
     Parameters
@@ -60,31 +61,38 @@ def get_LGO(image_width=1080, order=-8):
 
     return LGO
 
-# random mask encoding algorithm  (RM)
-def RM(N,M,Delta,image_width):
+
+def RM(N, M, Delta,image_width):
+    # random mask encoding algorithm  (RM)
     return Delta[np.random.randint(0,M,N),range(N)]
-# Random Superposition Algorithm (SR)
-def RS(N,M,Delta):
+
+
+def RS(N, M, Delta):
+    # Random Superposition Algorithm (SR)
     RN = np.transpose(np.random.uniform(low=0.0, high=2*pi, size=(1,M)))*np.ones((1,N))
     return np.angle(np.sum(np.exp(1j*(Delta+RN)),axis=0))+pi
-# Weighted Gerchberg-Saxton Algorithm (GSW)
-def GSW(N,M,Delta=None,image_width=1080,nbr_iterations=30):
+
+
+def GSW(N, M, Delta=None, image_width=1080, nbr_iterations=30):
+    # Weighted Gerchberg-Saxton Algorithm (GSW)
     if Delta is None:
         Delta = SLM.get_delta(image_width=image_width)
-    Phi = RS(N,M,Delta) # Initial guess
+    Phi = RS(N, M, Delta) # Initial guess
     W = np.ones((M,1))
     I_m =np.uint8(np.ones((M,1)))
     I_N = np.uint8(np.ones((1,N)))
     Delta_J = np.exp(1j*Delta)
     for J in range(nbr_iterations):
-        V = np.reshape(np.mean((np.exp(1j*(I_m*Phi)-Delta)),axis=1),(M,1))
+        V = np.reshape(np.mean((np.exp(1j*(I_m*Phi)-Delta)), axis=1), (M, 1))
         V_abs = abs(V)
         W = np.mean(V_abs)*np.divide(W,V_abs)
-        Phi = np.angle(sum(np.multiply(Delta_J, np.divide(np.multiply(W,V),V_abs)*I_N)))
+        Phi = np.angle(sum(np.multiply(Delta_J, np.divide(np.multiply(W, V), V_abs)*I_N)))
         print('Iteration: ', J+1, 'of ', nbr_iterations)
 
-    return np.reshape(128+Phi*255/(2*pi),(image_width,image_width))
-def  GS(N,M,Delta=None,image_width=1080,nbr_iterations=30):
+    return np.reshape(128+Phi*255/(2*pi), (image_width, image_width))
+
+
+def  GS(N, M, Delta=None, image_width=1080, nbr_iterations=30):
     if Delta is None:
         Delta = SLM.get_delta(image_width=image_width)
     Phi = RS(N,M,Delta) # Initial guess
@@ -179,6 +187,7 @@ def get_xm_ym_rect(nbr_rows,nbr_columns, dx=30e-6,dy=30e-6, d0x=-115e-6, d0y=-11
             ym[i*nbr_columns+j] = d0y + dy*i
     return xm,ym
 
+
 def get_xm_ym_E_L_Triangle(d=30e-6, d0x=-115e-6, d0y=-115e-6):
     '''
     Generates xm,ym in a equilateral triangle with sidelength d and first
@@ -194,6 +203,7 @@ def get_xm_ym_E_L_Triangle(d=30e-6, d0x=-115e-6, d0y=-115e-6):
     xm[2] = d0x + np.sqrt(3/4) * d
     ym[2] = d0y + d/2
     return xm, ym
+
 
 def get_xm_ym_triangle_with_center(d=30e-6, d0x=-115e-6, d0y=-115e-6):
         '''
@@ -214,6 +224,8 @@ def get_xm_ym_triangle_with_center(d=30e-6, d0x=-115e-6, d0y=-115e-6):
         ym[3] = d0y
 
         return xm, ym
+
+
 def get_Isaac_xm_ym(d=30e-6, d0x=-115e-6, d0y=-115e-6):
     '''
     Two particles, first placed at [d0x, d0y] other at [d0x, d0y + d]
@@ -264,8 +276,11 @@ def get_delta(image_width = 1080, xm=[], ym=[], zm=None, use_LGO=[False], order=
         if len(use_LGO)>m and use_LGO[m]:
             Delta[m,:] += np.reshape(LGO,(N))
             Delta[m,:] = Delta[m,:] % (2*pi)
-        # TODO Add z-dependence to to ensuere that this works also in 3d
+        # TODO Add possibility to adjust for lateral movement of beam when
+        # using zm != 0. Will require calibration parameters.
     return Delta, N, M
+
+
 def setup_fullscreen_plt_image():
     '''
     This script magically sets up pyplot lib so it displays an image on a secondary display
