@@ -230,7 +230,7 @@ def get_Isaac_xm_ym(d=30e-6, d0x=-115e-6, d0y=-115e-6):
     return xm, ym
 
 
-def get_delta(image_width = 1080, xm=[], ym=[], use_LGO=[False], order=-8):
+def get_delta(image_width = 1080, xm=[], ym=[], zm=None, use_LGO=[False], order=-8):
     """
     Calculates delta in paper. I.e the phase shift of light when travelling from
     the SLM to the trap position for a specific set of points
@@ -253,14 +253,15 @@ def get_delta(image_width = 1080, xm=[], ym=[], use_LGO=[False], order=-8):
     if True in use_LGO:
         LGO = get_LGO(image_width,order=order)
     M = len(xm) # Total number of traps
-    zm = np.zeros((M))
+    if zm is None:
+        zm = np.zeros((M))
     Delta=np.zeros((M,N))
     for m in range(M):
 
         # Calculate delta according to eq : in paper
         # Using python "%" instead of Matlabs "rem"
         Delta[m,:]=np.reshape(2*pi*p/lambda_/f*((np.transpose(I)*x*xm[m]+(y*I)*ym[m]) + 1/(2*f)*zm[m] * ( (np.transpose(I)*x)**2 + (y*I)**2 )) % (2*pi),(1,N))
-        if len(use_LGO)>m and use_LGO[m]: # TODO, check if this is the way to add this
+        if len(use_LGO)>m and use_LGO[m]:
             Delta[m,:] += np.reshape(LGO,(N))
             Delta[m,:] = Delta[m,:] % (2*pi)
         # TODO Add z-dependence to to ensuere that this works also in 3d
