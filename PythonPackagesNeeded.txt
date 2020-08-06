@@ -1,0 +1,24 @@
+List of the python packages needed (as installed with pip) to run the code for
+the camera and the motorized xy-stage. Requires that the correct thorlabs
+software is installed and can be found by the scripts.
+
+pythonnet ,
+ctypes (should be installed already) ,
+pywin32 ,
+nicelib ,
+Instrumental-lib ,
+python-opencv ,
+keras , # Optional, only for deep-learning tracking.
+tensorflow , # Optional, only for deep-learning tracking.
+
+For basler camera:
+
+swig (run "conda install -c anaconda siwg" before installing pypylon)
+pypylon - follow instructions in website. Used
+pypylon-1.5.4-cp37-cp37m-win_amd64.whl . Might also need setup-tools
+
+	- Generally can just google any errors that occur.
+	First or second proposed solution most often fixes the problem.
+
+# TODO - Check that these are all that are needed and that the program works
+# after installing them.
