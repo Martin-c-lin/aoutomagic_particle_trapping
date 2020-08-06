@@ -1,3 +1,4 @@
+# Include instructions on how to use the schedules in this file.
 1:
 #To add comments write on lines without data. Do not use colon in the comments.
 xm:-80e-6, -100e-6
