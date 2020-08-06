@@ -279,7 +279,8 @@ def get_delta(image_width = 1080, xm=[], ym=[], zm=None, use_LGO=[False], order=
     if zm is None:
         zm = np.zeros((M))
     # Compensate for shift in x-y plane when changing z
-    elif x_comp is not None:
+    zm = zm[:M]
+    if x_comp is not None:
         xm, ym = compensate_z(xm, ym, zm, x_comp, y_comp)
         print('compensated')
     Delta=np.zeros((M,N))

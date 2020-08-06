@@ -149,6 +149,7 @@ def get_default_c_p(recording_path=None):
     c_p['xm'], c_p['ym'] =  SLM.get_xm_ym_rect(
             nbr_rows=2, nbr_columns=2,
             d0x=-50e-6, d0y=-50e-6)
+    c_p['zm'] = np.zeros(len(c_p['xm']))
 
     # Cannot call SLM_loc_to_trap_loc until c_p has been created so we manually
     # converto from xm,ym to trap locs here
@@ -280,7 +281,8 @@ class CreateSLMThread(threading.Thread):
         global c_p
 
         c_p['xm'], c_p['ym'] = SLM.get_default_xm_ym()
-        Delta, N, M = SLM.get_delta(xm=c_p['xm'], ym=c_p['ym'],
+        c_p['zm'] = np.zeros(len(c_p['xm']))
+        Delta, N, M = SLM.get_delta(xm=c_p['xm'], ym=c_p['ym'], zm=c_p['zm'],
             use_LGO=c_p['use_LGO'],
             order=c_p['LGO_order'])
 
@@ -297,7 +299,9 @@ class CreateSLMThread(threading.Thread):
         while c_p['program_running']:
             if c_p['new_phasemask']:
                 # Calcualte new delta and phasemask
+                # TODO check zm
                 Delta, N, M = SLM.get_delta(xm=c_p['xm'], ym=c_p['ym'],
+                    zm=c_p['zm'],
                     use_LGO=c_p['use_LGO'],
                     order=c_p['LGO_order'])
                 if M==2:
@@ -1025,6 +1029,7 @@ class CameraThread(threading.Thread):
        parameter_dict = {
        'xm':c_p['xm'],
        'ym':c_p['ym'],
+       'zm':c_p['zm'],
        'use_LGO':c_p['use_LGO'],
        'LGO_order':c_p['LGO_order'],
        'setpoint_temperature':c_p['setpoint_temperature'],
@@ -1603,11 +1608,11 @@ def update_c_p(update_dict, wait_for_completion=True):
     Parameter wait_for_completion should be set to True if there is a need
     to wait for phasemask to be finished updating before continuing the program.
     '''
-    ok_parameters = ['use_LGO', 'LGO_order', 'xm', 'ym', 'setpoint_temperature',
+    ok_parameters = ['use_LGO', 'LGO_order', 'xm', 'ym', 'zm', 'setpoint_temperature',
     'recording_duration', 'target_experiment_z', 'SLM_iterations',
     'temperature_output_on','activate_traps_one_by_one','need_T_stable']
 
-    requires_new_phasemask = ['use_LGO', 'LGO_order', 'xm', 'ym', 'SLM_iterations']
+    requires_new_phasemask = ['use_LGO', 'LGO_order', 'xm', 'ym', 'zm', 'SLM_iterations']
 
     for key in update_dict:
         if key in ok_parameters:
