@@ -31,6 +31,27 @@ def get_save_path(base_path='F:/Martin/D', extension_path=""):
     return recording_path
 
 
+def set_defualt_trap_position(c_p):
+    # Initialize traps and set traps positions
+    c_p['traps_absolute_pos'] = np.zeros((2,1))
+    c_p['traps_relative_pos'] = np.zeros((2,1))
+
+    # Position of first trap
+    c_p['xm'] = [100]
+    c_p['ym'] = [200]
+
+    c_p['traps_absolute_pos'][0][0] = 100
+    c_p['traps_absolute_pos'][1][0] = 200
+    c_p['traps_relative_pos'][0][0] = c_p['traps_absolute_pos'][0][0]
+    c_p['traps_relative_pos'][1][0] = c_p['traps_absolute_pos'][1][0]
+
+    # Convert xm,ym to slm coordinates.
+    c_p['xm'] = [((x - c_p['slm_x_center']) / c_p['slm_to_pixel']) for x in c_p['xm']]
+    c_p['ym'] = [((x - c_p['slm_y_center']) / c_p['slm_to_pixel']) for x in c_p['ym']]
+
+    c_p['zm'] = np.zeros(len(c_p['xm']))
+
+
 def get_default_c_p(recording_path=None):
     '''
     Dictionary containing primarily parameters used for specifying the
@@ -40,12 +61,13 @@ def get_default_c_p(recording_path=None):
     # TODO : Consider to change this into a class.
     # Make this object possible to pickle and unpickle to make it easier to
     # reuse settings.
-    # TODO: Replace xm,ym, zm with single array or similar.
+    # TODO: Replace xm,ym, zm with single array or similar. Potentilly by
+    # Removing them completely and having only pixel coordinates in the code
+    # And converting on the fly for the SLM.
     if recording_path is None:
         recording_path = get_save_path()
     c_p = {
-        'serial_nums_motors': ['27502438','27502419'],
-        'serial_no_piezo': '97100532',
+        'serial_nums_motors': ['27502438','27502419','97100532'],# x,y,z
         'channel': 1,
         'network_path': 'G:/',
         'recording_path': recording_path,
@@ -68,7 +90,7 @@ def get_default_c_p(recording_path=None):
         'tracking_on': False,
         'setpoint_temperature': 25,
         'current_temperature': 25,
-        'starting_temperature': 23.4,
+        'starting_temperature': 25,
         'temperature_controller_connected': False,
         'temperature_stable': False,
         'temperature_output_on':True,
@@ -91,12 +113,12 @@ def get_default_c_p(recording_path=None):
         # negative for down
         'target_experiment_z': 150,  # height in ticks at which experiment should
         # be performed
-        'z_x_diff': 200,  # Used for compensating drift in z when moving the
+        'z_x_diff': 0,  # Used for compensating drift in z when moving the
         # sample. Caused by sample being slightly tilted Needs to be calibrated
         # calculated as the change needed in z (measured in steps) when the
         # motor is moved 1 mm in positive direction z_x_diff = (z1-z0)/(x1-x0) steps/mm
         # Sign ,+ or -,of this?
-        'z_y_diff': -400, # approximate, has not measured this
+        'z_y_diff': 0, # approximate, has not measured this
         'x_start': 0,
         'temperature_z_diff': 0,#-180, #-80,  # How much the objective need to be moved
         # in ticks when the objective is heated 1C. Needs to be calibrated manually.
@@ -108,9 +130,8 @@ def get_default_c_p(recording_path=None):
         # This is the position of the 0th order of the SLM (ie where the trap)
         # with xm=ym=0 is located in camera pixel coordinates
         'slm_y_center': 576,
-        'slm_to_pixel': 5000000.0, # Basler
-        #'save_phasemask':True,
-        #4550000.0,# Thorlabs
+        # 'slm_to_pixel': 5000000.0, # Basler
+        # #4550000.0,# Thorlabs
 
         'return_z_home': False,
         'focus_threshold':1_000, #
@@ -118,15 +139,13 @@ def get_default_c_p(recording_path=None):
         'particle_size_threshold': 200,  # Parcticle detection threshold
         'bright_particle': True,  # Is particle brighter than the background?
         'xy_movement_limit': 1200,
-        'motor_locks': [threading.Lock(), threading.Lock()],
+        #'motor_locks': [threading.Lock(), threading.Lock()],
 
         'use_LGO':[False],
         'LGO_order': -8,
         'nbr_ghost_traps':0,
         # Ghost-traps: traps to be added after particle(s) are lifted to
         # make comparison measurements
-        #'ghost_traps_x':[],
-        #'ghost_traps_y':[],
         'exposure_time':80, # ExposureTime in micro s
         'SLM_iterations':5,
         'trap_separation_x':20e-6,
@@ -144,29 +163,16 @@ def get_default_c_p(recording_path=None):
         # for the path-search
     }
 
-    # Set traps positions
-    c_p['traps_absolute_pos'] = np.zeros((2,1))
-    c_p['traps_relative_pos'] = np.zeros((2,1))
+    # Add camera dependent parameters.
+    c_p['mmToPixel'] = 17736 if c_p['camera_model'] == 'basler' else 16140
+    c_p['slm_to_pixel'] = 5_000_000 if c_p['camera_model'] == 'basler' else 4_550_000
 
-    # Position of first trap
-    c_p['traps_absolute_pos'][0][0] = 678
-    c_p['traps_absolute_pos'][1][0] = 465
-    c_p['traps_relative_pos'][0][0] = 678
-    c_p['traps_relative_pos'][1][0] = 465
-    c_p['xm'], c_p['ym'] =  SLM.get_xm_ym_rect(
-            nbr_rows=2, nbr_columns=2,
-            d0x=-50e-6, d0y=-50e-6)
-    c_p['zm'] = np.zeros(len(c_p['xm']))
-
-    # Cannot call SLM_loc_to_trap_loc until c_p has been created so we manually
-    # converto from xm,ym to trap locs here
-    tmp_x = [x * c_p['slm_to_pixel'] + c_p['slm_x_center'] for x in c_p['xm']]
-    tmp_y = [y * c_p['slm_to_pixel'] + c_p['slm_y_center'] for y in c_p['ym']]
-    tmp = np.asarray([tmp_x, tmp_y])
-    c_p['traps_absolute_pos'] = tmp
+    # Initialize traps and set traps positions
+    set_defualt_trap_position(c_p)
 
     c_p['traps_occupied'] = [False for i in range(len(c_p['traps_absolute_pos'][0]))]
     c_p['phasemask'] = np.zeros((1080, 1080))  # phasemask  size
+
     return c_p
 
 
@@ -225,7 +231,7 @@ def start_threads(cam=True, motor_x=True, motor_y=True, motor_z=True,
 
     if motor_z:
         try:
-            z_thread = z_movement_thread(4, 'z-thread',serial_no=c_p['serial_no_piezo'],channel=c_p['channel'])
+            z_thread = z_movement_thread(4, 'z-thread',serial_no=c_p['serial_nums_motors'][2],channel=c_p['channel'])
             z_thread.start()
             thread_list.append(z_thread)
             print('Motor z thread started')
@@ -475,7 +481,7 @@ class UserInterface:
         # TODO make it so that we can handle exceptions from the file better here.
         # Bring up a confirmation menu for the schedule perhaps?
         experiment_list = rdff.ReadFileToExperimentList(filepath)
-        if len(experiment_list) > 0:
+        if experiment_list is not None and len(experiment_list) > 0:
             c_p['experiment_schedule'] = experiment_list
             print('Starting the following experiment. \n', experiment_list)
             # Reset experiment progress
@@ -627,7 +633,6 @@ class UserInterface:
                 exposure_entry.delete(0, last=5000)
 
         def connect_disconnect_motorX():
-            # TODO: Behaviour of this might be odd if the motor did not get connected.
             c_p['connect_motor'][0] = not c_p['connect_motor'][0]
 
         def connect_disconnect_motorY():
@@ -787,7 +792,6 @@ class UserInterface:
         '''
         Helper function for updating on-screen indicators
         '''
-        # TODO: Try an incorporate some of the labels into the buttons.
         global c_p
         # Update if recording is turned on or not
         if c_p['recording']:
@@ -899,21 +903,29 @@ class MotorThread(threading.Thread):
             if c_p['motors_connected'][self.axis] and \
                 c_p['connect_motor'][self.axis] and c_p['motors_connected'][self.axis]:
                 # Acquire lock to ensure that it is safe to move the motor
-                with c_p['motor_locks'][self.axis]:
-                    if np.abs(c_p['motor_movements'][self.axis])>0:
-                        # The movement limit must be positive
-                        c_p['xy_movement_limit'] = np.abs(c_p['xy_movement_limit'])
-                        # Check how much the motor is allowed to move
+                # with c_p['motor_locks'][self.axis]:
+                if np.abs(c_p['motor_movements'][self.axis])>0:
 
-                        if np.abs(c_p['motor_movements'][self.axis])<=c_p['xy_movement_limit']:
-                            TM.MoveMotorPixels(self.motor, c_p['motor_movements'][self.axis])
+                    # The movement limit must be positive
+                    c_p['xy_movement_limit'] = np.abs(c_p['xy_movement_limit'])
+
+                    # Check how much the motor is allowed to move
+                    if np.abs(c_p['motor_movements'][self.axis])<=c_p['xy_movement_limit']:
+                        TM.MoveMotorPixels(self.motor,
+                            c_p['motor_movements'][self.axis],
+                            mmToPixel=c_p['mmToPixel'])
+                    else:
+                        if c_p['motor_movements'][self.axis]>0:
+                            TM.MoveMotorPixels(self.motor,
+                                c_p['xy_movement_limit'],
+                                mmToPixel=c_p['mmToPixel'])
                         else:
-                            if c_p['motor_movements'][self.axis]>0:
-                                TM.MoveMotorPixels(self.motor, c_p['xy_movement_limit'])
-                            else:
-                                TM.MoveMotorPixels(self.motor, -c_p['xy_movement_limit'])
-                        c_p['motor_movements'][self.axis] = 0
-                    c_p['motor_current_pos'][self.axis] = float(str(self.motor.Position))
+                            TM.MoveMotorPixels(self.motor,
+                                -c_p['xy_movement_limit'],
+                                mmToPixel=c_p['mmToPixel'])
+
+                    c_p['motor_movements'][self.axis] = 0
+                c_p['motor_current_pos'][self.axis] = float(str(self.motor.Position))
             # Motor is connected but should be disconnected
             elif c_p['motors_connected'][self.axis] and not c_p['connect_motor'][self.axis]:
                 TM.DisconnectMotor(self.motor)
@@ -997,9 +1009,9 @@ class z_movement_thread(threading.Thread):
             # Piezomotor not connected but should be
             elif not self.piezo.is_connected and c_p['connect_motor'][2]:
                 self.piezo.connect_piezo_motor()
+                time.sleep(0.4)
                 if self.piezo.is_connected:
                     # If the motor was just connected then reset positions
-                    # TODO: Test if this is needed also for x-y motors.
                     c_p['motor_current_pos'][2] = self.piezo.get_position()
 
                     c_p['z_starting_position'] = c_p['motor_current_pos'][2]
@@ -1195,7 +1207,7 @@ class CameraThread(threading.Thread):
           if not video_created:
               video, experiment_info_name, exp_info_params = self.create_video_writer()
               video_created = True
-          # Start continously capturin images now that the camera parameters have been set
+          # Start continously capturing images now that the camera parameters have been set
           while c_p['program_running']\
                and not c_p['new_AOI_camera']:
 
@@ -1543,7 +1555,7 @@ def path_search(filled_traps_locs, target_particle_location,
         was found. False otherwise.
 
     '''
-    # TODO Make this more efficient. Also make it possible to try and
+    # TODO Make it possible to try and
     # move in between particles.
     global c_p
 
@@ -1674,11 +1686,9 @@ def update_c_p(update_dict, wait_for_completion=True):
 
     requires_new_phasemask = ['use_LGO', 'LGO_order', 'xm', 'ym', 'zm', 'SLM_iterations']
 
-
     for key in update_dict:
         if key in ok_parameters:
             try:
-                # TODO: Test that this works
                 if key == 'xm' and min(update_dict[key]) > 1:
                     c_p[key] = pixels_to_SLM_locs(update_dict[key], 0)
                     print('xm' ,update_dict[key])
@@ -1687,6 +1697,7 @@ def update_c_p(update_dict, wait_for_completion=True):
                     print('ym ',update_dict[key])
                 else:
                     c_p[key] = update_dict[key]
+
             except:
                 print('Could not update control parameter ', key, 'with value',
                 value)
@@ -1696,8 +1707,6 @@ def update_c_p(update_dict, wait_for_completion=True):
 
     # Need to update measurement_name even if it is not in measurement to
     # prevent confusion
-    if 'measurement_name' not in update_dict:
-        c_p['measurement_name'] = 'untitled'
 
     if 'ghost_traps_x' or 'ghost_traps_y' not in update_dict:
         c_p['nbr_ghost_traps'] = 0
@@ -1756,8 +1765,8 @@ def set_AOI(half_image_width=50, left=None, right=None, up=None, down=None):
     global c_p
 
     # Do not want motors to be moving when changing AOI!
-    c_p['motor_locks'][0].acquire()
-    c_p['motor_locks'][1].acquire()
+    # c_p['motor_locks'][0].acquire()
+    # c_p['motor_locks'][1].acquire()
     # If exact values have been provided for all the corners change AOI
     if c_p['camera_model'] == 'ThorlabsCam':
         if left is not None and right is not None and up is not None and down is not None:
@@ -1789,8 +1798,8 @@ def set_AOI(half_image_width=50, left=None, right=None, up=None, down=None):
 
     # Give motor threads time to catch up
     time.sleep(0.5)
-    c_p['motor_locks'][0].release()
-    c_p['motor_locks'][1].release()
+    # c_p['motor_locks'][0].release()
+    # c_p['motor_locks'][1].release()
 
 
 def find_focus():
@@ -1932,6 +1941,7 @@ def check_all_traps(distances=None):
         if trap_index >= nbr_traps - c_p['nbr_ghost_traps']:
             c_p['traps_occupied'][trap_index] = True
         else:
+            # Check occupation of non ghost traps.
             trapped_particle_index = trap_occupied(distances, trap_index)
             if trapped_particle_index is not None:
                 trapped_particle_indices.append(trapped_particle_index)
@@ -2164,7 +2174,6 @@ def SLM_loc_to_trap_loc(xm, ym):
 
 def save_phasemask():
     # Helperfunction for saving the SLM.
-    # TODO : save all data in measurement folder?
     # Should probably save parameters of this at same time as well.
     global c_p
 
@@ -2221,40 +2230,11 @@ thread_list = []
 d0x = -80e-6
 d0y = -80e-6
 
-# Define experiment to be run
-
+# Define experiment to be run. Can also be read from a file nowadays.
 xm1, ym1 = SLM.get_xm_ym_rect(nbr_rows=2, nbr_columns=1, d0x=d0x, d0y=d0y, dx=20e-6, dy=20e-6,)
-# xm2, ym2 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=12e-6, dy=20e-6,)
-# xm3, ym3 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=14e-6, dy=20e-6,)
-# xm4, ym4 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=16e-6, dy=20e-6,)
-# xm5, ym5 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=18e-6, dy=20e-6,)
-# xm6, ym6 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=20e-6, dy=20e-6,)
-# xm7, ym7 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=22e-6, dy=20e-6,)
-# xm8, ym8 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=24e-6, dy=20e-6,)
-# xm9, ym9 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=26e-6, dy=20e-6,)
-# xm10, ym10 = SLM.get_xm_ym_rect(nbr_rows=1, nbr_columns=2, d0x=d0x, d0y=d0y, dx=30e-6, dy=20e-6,)
-
-
 experiment_schedule = [
 {'xm':xm1, 'ym':ym1, 'use_LGO':[False],'target_experiment_z':1000,
-'LGO_order':4,  'recording_duration':1000,'SLM_iterations':30,'activate_traps_one_by_one':False}, # Should use few iteratoins when we only have 2 traps
-# {'LGO_order':-4,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
-# {'LGO_order':8,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
-# {'LGO_order':-8,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
-# {'LGO_order':12,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
-# {'LGO_order':-12,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
-# {'LGO_order':16,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
-# {'LGO_order':-16,'xm':xm1, 'ym':ym1, 'use_LGO':[True]},
-
-# {'xm':xm3, 'ym':ym3, 'use_LGO':[False,]},
-# {'xm':xm4, 'ym':ym4, 'use_LGO':[False,]},
-# {'xm':xm5, 'ym':ym5, 'use_LGO':[False,]},
-# {'xm':xm6, 'ym':ym6, 'use_LGO':[False,]},
-# {'xm':xm7, 'ym':ym7, 'use_LGO':[False,]},
-# {'xm':xm8, 'ym':ym8, 'use_LGO':[False,]},
-# {'xm':xm9, 'ym':ym9, 'use_LGO':[False,]},
-# {'xm':xm10, 'ym':ym10, 'use_LGO':[False,]},
-
+'LGO_order':4,  'recording_duration':1000,'SLM_iterations':30,'activate_traps_one_by_one':False},
 ]
 
 c_p['experiment_schedule'] = experiment_schedule
