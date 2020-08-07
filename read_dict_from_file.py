@@ -13,8 +13,8 @@ float_parameters = ['LGO_order', 'setpoint_temperature',
 bool_parameters = ['temperature_output_on', 'activate_traps_one_by_one',
                    'need_T_stable']
 bool_list = ['use_LGO']
-float_list = ['xm', 'ym']
-
+float_list = ['xm', 'ym', 'zm', 'ghost_traps_x', 'ghost_traps_y', 'ghost_traps_z']
+string_list = ['measurement_name']
 
 def Line2KeyValue(line):
     '''
@@ -64,6 +64,8 @@ def Line2KeyValue(line):
         elif key in bool_list:
             value_list = [(s=='True') for s in string_value.split(',')]
             return key, value_list
+        elif key in string_list:
+            return key, string_value
     except:
         print('Warning, could not convert value in ', string_value)
         return None, None

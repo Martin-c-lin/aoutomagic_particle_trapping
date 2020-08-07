@@ -473,8 +473,7 @@ class UserInterface:
         global c_p
         filepath = fd.askopenfilename()
         # TODO make it so that we can handle exceptions from the file better here.
-        # Also make it so it creates a new directory to save the data in named
-        # after the schedule file.
+        # Bring up a confirmation menu for the schedule perhaps?
         experiment_list = rdff.ReadFileToExperimentList(filepath)
         if len(experiment_list) > 0:
             c_p['experiment_schedule'] = experiment_list
@@ -927,6 +926,8 @@ class MotorThread(threading.Thread):
                 # Check if motor was successfully connected.
                 if self.motor is not None:
                     c_p['motors_connected'][self.axis] = True
+                    c_p['motor_current_pos'][self.axis] = float(str(self.motor.Position))
+                    c_p['motor_starting_pos'][self.axis] = c_p['motor_current_pos'][self.axis]
                 else:
                     motor_ = 'x' if self.axis == 0 else 'y'
                     print('Failed to connect motor '+motor_)
@@ -985,7 +986,7 @@ class z_movement_thread(threading.Thread):
                         c_p['z_movement'] = 0
 
                 elif c_p['return_z_home'] and c_p['motor_current_pos'][2]>compensate_focus():
-                    lifting_distance -= min(40,c_p['motor_current_pos'][2]-compensate_focus())
+                    lifting_distance -= min(20,c_p['motor_current_pos'][2]-compensate_focus())
                     # Compensating for hysteresis effect in movement
                     print('homing z')
                 if c_p['motor_current_pos'][2]<=compensate_focus() or c_p['z_movement'] != 0:
@@ -996,7 +997,14 @@ class z_movement_thread(threading.Thread):
             # Piezomotor not connected but should be
             elif not self.piezo.is_connected and c_p['connect_motor'][2]:
                 self.piezo.connect_piezo_motor()
+                if self.piezo.is_connected:
+                    # If the motor was just connected then reset positions
+                    # TODO: Test if this is needed also for x-y motors.
+                    c_p['motor_current_pos'][2] = self.piezo.get_position()
 
+                    c_p['z_starting_position'] = c_p['motor_current_pos'][2]
+                    c_p['motor_starting_pos'][0] = c_p['motor_current_pos'][0]
+                    c_p['motor_starting_pos'][1] = c_p['motor_current_pos'][1]
             # Piezo motor connected but should not be
             elif self.piezo.is_connected and not c_p['connect_motor'][2]:
                 self.piezo.disconnect_piezo()
@@ -1064,9 +1072,9 @@ class CameraThread(threading.Thread):
 
         experiment_info_name =c_p['recording_path'] + '/data-' + c_p['measurement_name'] + \
             str(now.hour) + '-' + str(now.minute) + '-' + str(now.second)
-
+        print('Image width,height,framerate',image_width,image_height,int(c_p['framerate']))
         video = VideoWriter(video_name, fourcc,
-            float(c_p['framerate']),
+            min(500,c_p['framerate']), # Format cannot handle high framerates
             (image_width, image_height), isColor=False)
         exp_info_params = self.get_important_parameters()
         return video, experiment_info_name, exp_info_params
@@ -1171,6 +1179,7 @@ class CameraThread(threading.Thread):
           try:
               self.cam.ExposureTime = c_p['exposure_time']
               c_p['framerate'] = self.cam.ResultingFrameRate.GetValue()
+              c_p['framerate'] = round(float(c_p['framerate']), 1)
               print('Read framerate to ', c_p['framerate'], ' fps.')
           except:
               print('Exposure time not accepted by camera')
@@ -1284,7 +1293,8 @@ class ExperimentControlThread(threading.Thread):
        '''
        z_starting_pos = compensate_focus()
        patiance_counter = 0
-       print('Lifting time. Starting from ', z_starting_pos)
+       print('Lifting time. Starting from ', z_starting_pos, ' lifting ',
+            c_p['target_experiment_z'])
        while c_p['target_experiment_z'] > c_p['motor_current_pos'][2] - z_starting_pos:
             time.sleep(0.2)
             all_filled, nbr_particles, min_index_trap, min_index_particle  =\
@@ -1468,8 +1478,10 @@ class ExperimentControlThread(threading.Thread):
 
                            if 'ghost_traps_x' in setup_dict:
                                print('Adding ghost traps')
+                               ghost_traps_z = None if 'ghost_traps_z' not in setup_dict else setup_dict['ghost_traps_z']
                                self.add_ghost_traps(setup_dict['ghost_traps_x'],
-                                                    ghost_traps_y)
+                                                    setup_dict['ghost_traps_y'],
+                                                    ghost_traps_z)
                                # Will currently add ... which will
                            # Particles lifted, can start experiment.
                            time_remaining = self.run_experiment(time_remaining)
@@ -1668,10 +1680,10 @@ def update_c_p(update_dict, wait_for_completion=True):
             try:
                 # TODO: Test that this works
                 if key == 'xm' and min(update_dict[key]) > 1:
-                    c_p[key] = pixel_to_SLM_loc(update_dict[key], 0)
+                    c_p[key] = pixels_to_SLM_locs(update_dict[key], 0)
                     print('xm' ,update_dict[key])
                 elif key == 'ym' and min(update_dict[key]) > 1:
-                    c_p[key] = pixel_to_SLM_loc(update_dict[key], 1)
+                    c_p[key] = pixels_to_SLM_locs(update_dict[key], 1)
                     print('ym ',update_dict[key])
                 else:
                     c_p[key] = update_dict[key]
@@ -1914,10 +1926,15 @@ def check_all_traps(distances=None):
     if distances is None:
         distances = get_particle_trap_distances()
     trapped_particle_indices = []
-    for trap_index in range(len(distances)-c_p['nbr_ghost_traps']):
-        trapped_particle_index = trap_occupied(distances, trap_index)
-        if trapped_particle_index is not None:
-            trapped_particle_indices.append(trapped_particle_index)
+    nbr_traps = len(distances)
+    for trap_index in range(nbr_traps):
+        # Check for ghost traps
+        if trap_index >= nbr_traps - c_p['nbr_ghost_traps']:
+            c_p['traps_occupied'][trap_index] = True
+        else:
+            trapped_particle_index = trap_occupied(distances, trap_index)
+            if trapped_particle_index is not None:
+                trapped_particle_indices.append(trapped_particle_index)
     return trapped_particle_indices
 
 
@@ -2056,7 +2073,7 @@ def zoom_in(margin=60, use_traps=False):
         down = min(max(c_p['traps_absolute_pos'][1]) + margin, 512)
         down = int(down // 16 * 16)
 
-    c_p['framerate'] = 500
+    #c_p['framerate'] = 500
     # Note calculated framerate is automagically saved.
     set_AOI(left=left, right=right, up=up, down=down)
 
@@ -2064,7 +2081,7 @@ def zoom_in(margin=60, use_traps=False):
 def zoom_out():
     if c_p['camera_model'] == 'ThorlabsCam':
         set_AOI(left=0, right=1200, up=0, down=1000)
-        c_p['framerate'] = 500
+        #c_p['framerate'] = 500
     else:
         set_AOI(left=0, right=672, up=0, down=512)
 
@@ -2118,7 +2135,7 @@ def update_traps_relative_pos():
     c_p['traps_relative_pos'] = tmp
 
 
-def pixel_to_SLM_loc(locs, axis):
+def pixels_to_SLM_locs(locs, axis):
     '''
     Function for converting from PIXELS to SLM locations.
     '''

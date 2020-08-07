@@ -347,9 +347,9 @@ def InitiateMotor(serialNumber, pollingRate=250, DeviceSettingsName='Z812'):
                 print("Will wait 2 seconds and try again")
                 sleep(2)
             else:
-                print("Cannot connect to device.\n Please ensure that the \
-                      device is connected to your computer and not in use in \
-                          any other program!")
+                print("Cannot connect to device.\n Please ensure that the" +\
+                      " device is connected to your computer and not in"+\
+                          " use by any other program!")
                 return None
     motor.WaitForSettingsInitialized(5000)
     # configure the stage
