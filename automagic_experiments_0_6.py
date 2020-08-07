@@ -103,12 +103,13 @@ def get_default_c_p(recording_path=None):
         # to compensate for the changes in temperature.Measured in
         # [ticks/deg C]
 
-        'slm_x_center': 720,#700,#711, # needs to be recalibrated if camera is moved.
+        'slm_x_center': 558,#Calibrated 07/08/2020.
+        # Needs to be recalibrated if camera is moved.
         # This is the position of the 0th order of the SLM (ie where the trap)
-        # with xm=ym=0 is located in camera coordinates
-        'slm_y_center': 605,#594 seem to be a tiny bit off, +5?
+        # with xm=ym=0 is located in camera pixel coordinates
+        'slm_y_center': 576,
         'slm_to_pixel': 5000000.0, # Basler
-        'save_phasemask':False,
+        #'save_phasemask':True,
         #4550000.0,# Thorlabs
 
         'return_z_home': False,
@@ -121,7 +122,7 @@ def get_default_c_p(recording_path=None):
 
         'use_LGO':[False],
         'LGO_order': -8,
-        'nbr_ghost_traps':0
+        'nbr_ghost_traps':0,
         # Ghost-traps: traps to be added after particle(s) are lifted to
         # make comparison measurements
         #'ghost_traps_x':[],
@@ -189,7 +190,8 @@ def terminate_threads():
         del thread
 
 
-def start_threads(cam=True, motor_x=True, motor_y=True, motor_z=True, slm=True, tracking=True, isaac=False, temp=True):
+def start_threads(cam=True, motor_x=True, motor_y=True, motor_z=True,
+                    slm=True, tracking=True, isaac=False, temp=True):
 
     """
     Function for starting all the threads, should only be called once!
@@ -317,8 +319,8 @@ class CreatePhasemaskThread(threading.Thread):
                     c_p['phasemask'] = SLM.GSW(
                         N, M, Delta,
                         nbr_iterations=c_p['SLM_iterations'])
-                if c_p['save_phasemask']:
-                    save_phasemask()
+                # if c_p['save_phasemask']:
+                #     save_phasemask()
                 c_p['phasemask_updated'] = True
                 c_p['new_phasemask'] = False
 
@@ -1043,6 +1045,7 @@ class CameraThread(threading.Thread):
        'temperature_output_on':c_p['temperature_output_on'],
        'exposure_time':c_p['exposure_time'],
        'starting_temperature':c_p['current_temperature'],
+       'phasemask':c_p['phasemask'],
        }
        return parameter_dict
 
@@ -1352,22 +1355,30 @@ class ExperimentControlThread(threading.Thread):
             return 0
         return start + duration - time.time()
 
-   def add_ghost_traps(self, ghost_traps_x, ghost_traps_y):
+   def add_ghost_traps(self, ghost_traps_x, ghost_traps_y, ghost_traps_z=None):
        '''
        Function for adding ghost traps after having lifted the particles.
        '''
+       # Update number of ghost traps.
+       c_p['nbr_ghost_traps'] = len(ghost_traps_x)
+
+       # Convert traps positions to SLM positions.
        if min(ghost_traps_x) >= 1:
            ghost_traps_x = pixels_to_SLM_locs(ghost_traps_x, 0)
        if min(ghost_traps_y) >= 1:
            ghost_traps_y = pixels_to_SLM_locs(ghost_traps_y, 1)
+       if ghost_traps_z is None:
+           ghost_traps_z = np.zeros(c_p['nbr_ghost_traps'])
+
+       # Append ghost traps to xm, ym and zm
        c_p['xm'] += ghost_traps_x
        c_p['ym'] += ghost_traps_y
-       c_p['nbr_ghost_traps'] = len(ghost_traps_x)
+       c_p['zm'] += ghost_traps_z
+
+       # Update the phasemask
        c_p['new_phasemask'] = True
        while c_p['new_phasemask'] and c_p['tracking_on']:
            time.sleep(0.1)
-       # TODO: Will currently try to trap stuff in the ghost_traps
-       save_phasemask()
 
    def run(self):
         '''
@@ -1651,7 +1662,6 @@ def update_c_p(update_dict, wait_for_completion=True):
 
     requires_new_phasemask = ['use_LGO', 'LGO_order', 'xm', 'ym', 'zm', 'SLM_iterations']
 
-    # TODO add possibility to load an old SLM here!
 
     for key in update_dict:
         if key in ok_parameters:
@@ -1700,7 +1710,8 @@ def update_c_p(update_dict, wait_for_completion=True):
     # Check if there is an old phasemask to be used.
     if 'load_phasemask' in update_dict:
         try:
-            c_p['phasemask'] = np.load(update_dict['load_phasemask'])
+            data = np.load(update_dict['load_phasemask'])
+            c_p['phasemask'] = data['phasemask']
             time.sleep(0.5)
         except:
             print('Could not load phasemask from ', update_dict['load_phasemask'])
@@ -1896,14 +1907,14 @@ def check_all_traps(distances=None):
     Updates all traps to see if they are occupied.
     Returns the indices of the particles which are trapped. Indices refers to their
     position in the c_p['particle_centers'] array.
-    Returns an empty array if there are no trapped particles
+    Returns an empty array if there are no trapped particles.
 
-    '''.
+    '''
 
     if distances is None:
         distances = get_particle_trap_distances()
     trapped_particle_indices = []
-    for trap_index in range(len(distances)-nbr_ghost_traps):
+    for trap_index in range(len(distances)-c_p['nbr_ghost_traps']):
         trapped_particle_index = trap_occupied(distances, trap_index)
         if trapped_particle_index is not None:
             trapped_particle_indices.append(trapped_particle_index)
@@ -2139,11 +2150,12 @@ def save_phasemask():
     # TODO : save all data in measurement folder?
     # Should probably save parameters of this at same time as well.
     global c_p
+
     now = datetime.now()
-    path = get_save_path(c_p['recording_path'], '/phasemasks')
-    phasemask_name = path + c_p['measurement_name'] + \
-        '-' + str(now.hour) + '-' + str(now.minute) + '-' + str(now.second)
-    np.save(c_p['phasemask'], phasemask_name)
+    phasemask_name = c_p['recording_path'] + '/phasemask-'+\
+        c_p['measurement_name'] + '-' + str(now.hour) + '-' + str(now.minute) +\
+        '-' + str(now.second) + '.npy'
+    np.save(phasemask_name, c_p['phasemask'], allow_pickle=True)
 
 
 def move_particles_slowly(last_d=30e-6):

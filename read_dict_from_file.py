@@ -5,7 +5,6 @@ Created on Mon Jul 27 08:49:16 2020
 @author: Martin Selin
 """
 
-# TODO move this into the main script
 # TODO: use_LGO (and LGO_order?) are lists of bools not numbers.
 float_parameters = ['LGO_order', 'setpoint_temperature',
                     'recording_duration', 'target_experiment_z',

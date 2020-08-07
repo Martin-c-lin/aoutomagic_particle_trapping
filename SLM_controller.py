@@ -31,10 +31,10 @@ def get_default_c_p(
         'd0x':-115e-6,
         'd0y':-115e-6,
         'd0z':0,
-        'slm_x_center': 700,# needs to be recalibrated if camera is moved.
+        'slm_x_center': 558,#700-142,# needs to be recalibrated if camera is moved.
         # This is the position of the 0th order of the SLM (ie where the trap)
         # with xm=ym=0 is located in camera coordinates
-        'slm_y_center': 605,
+        'slm_y_center': 576,#605-29,
         'slm_to_pixel':5000000, # Basler
         #4550000.0, #thorlabs
         'x_comp':3.2e4,
