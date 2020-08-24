@@ -7,6 +7,8 @@ Created on Mon Jul 27 08:49:16 2020
 
 # TODO: use_LGO (and LGO_order?) are lists of bools not numbers.
 
+import pickle
+
 float_parameters = ['LGO_order', 'setpoint_temperature',
                     'recording_duration', 'target_experiment_z',
                     'SLM_iterations']
@@ -18,7 +20,31 @@ float_list = ['xm', 'ym', 'zm', 'ghost_traps_x', 'ghost_traps_y',
             'ghost_traps_z']
 string_list = ['measurement_name']
 
-def Line2KeyValue(line):
+# Make it possible to load also trap locations.
+
+def LoadPhasemask(phasemaskDictPath):
+    '''
+    Function for loading the phasemask of a previous experiment located in a
+    pickled dict in phasemaskDictPath (as automatically saved by the program).
+    Returns the loaded phasemask if successfull, otherwise None.
+    '''
+    try:
+        file = open(phasemaskDictPath,'rb')
+    except:
+        print('Could not load file in', phasemaskDictPath)
+        return None, None, None
+    try:
+        dict = pickle.load(file)
+        file.close()
+        print(dict)
+        return dict['phasemask'], dict['xm'], dict['ym']
+    except:
+        print('Could not load data.')
+        file.close()
+        return None, None, None
+
+
+def Line2KeyValue(line, current_dict):
     '''
 
     Function for converting a string(line in file) to a key-value pair.
@@ -56,20 +82,28 @@ def Line2KeyValue(line):
     # Convert the value from string to, either float, list or bool.
     try:
         if key in float_parameters:
+            current_dict[key] = float(string_value)
             return key, float(string_value)
         elif key in bool_parameters:
             value = (string_value == 'True')
+            current_dict[key] = value
             return key, value
         elif key in float_list:
             value_list = [float(s) for s in string_value.split(',')]
+            current_dict[key] = value_list
             return key, value_list
         elif key in bool_list:
             value_list = [(s=='True') for s in string_value.split(',')]
+            current_dict[key] = value_list
             return key, value_list
         elif key in string_list:
+            current_dict[key] = string_value[:-2]
             return key, string_value[:-2]
+        elif key == 'phasemask':
+            current_dict['phasemask'], current_dict['xm'], current_dict['ym'] = LoadPhasemask(string_value[:-1])
+            return key, LoadPhasemask(string_value[:-1]) # last element is end of line
     except:
-        print('Warning, could not convert value in ', string_value)
+        print('Warning, could not convert ',key,' value in ', string_value)
         return None, None
 
     # Key not in any of the lists.
@@ -106,13 +140,11 @@ def ReadFileToExperimentList(filepath):
 
     # Look through all the lines of code
     for idx, line in enumerate(data):
-        key, value = Line2KeyValue(line)
+        key, value = Line2KeyValue(line, current_dict)
         # If the key is an integer then we need a new dict.
         if isinstance(key, int) and len(current_dict) > 0:
             dict_list.append(current_dict)
             current_dict = {}
-        elif key is not None:
-            current_dict[key] = value
         else:
             print('Could not read line', idx+1, ' into anything meaningfull.')
 

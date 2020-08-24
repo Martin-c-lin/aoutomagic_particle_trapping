@@ -1,9 +1,14 @@
 # Include instructions on how to use the schedules in this file.
+# Begin a new line with an integer number to create a new experiment.
 1:
 #To add comments write on lines without data. Do not use colon in the comments.
+# one can use either pixels or "SLM coordinates" to position the traps.
 xm:-80e-6, -100e-6
 ym:-60e-6, -60e-6
 use_LGO:True,True,
 recording_duration:1000
-2:
+2: # Which integers are written does not matter
+# This is the second line
 use_LGO:False,
+phasemask:C:/Users/marti/Downloads/data-test_ghost_trap15-10-19
+# Loading a phasemask overrides all other changes to xm,ym, etc
