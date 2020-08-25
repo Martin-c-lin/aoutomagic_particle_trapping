@@ -74,7 +74,6 @@ class CameraThread(threading.Thread):
         '''
         global c_p
         now = datetime.now()
-        fourcc = VideoWriter_fourcc(*'MJPG')
         image_width = c_p['AOI'][1] - c_p['AOI'][0]
         image_height = c_p['AOI'][3] - c_p['AOI'][2]
 
@@ -85,10 +84,9 @@ class CameraThread(threading.Thread):
         experiment_info_name =c_p['recording_path'] + '/data-' + c_p['measurement_name'] + \
             str(now.hour) + '-' + str(now.minute) + '-' + str(now.second)
         print('Image width,height,framerate',image_width,image_height,int(c_p['framerate']))
-        video = VideoWriter(video_name, fourcc,
-            c_p['framerate'], # Format cannot handle high framerates
-            (image_height, image_width), isColor=False)
-            #(image_width, image_height), isColor=False)
+
+        fourcc = VideoWriter_fourcc(*'MJPG')
+        video = VideoWriter(video_name, fourcc, float(c_p['framerate']), (image_width, image_height))
         return video, experiment_info_name
 
    def thorlabs_capture(self):
@@ -130,7 +128,6 @@ class CameraThread(threading.Thread):
               # Capture an image and update the image count
               image_count = image_count+1
               image[:][:][:] = self.cam.latest_frame()
-
 
           video.release()
 
@@ -289,7 +286,7 @@ c_p = get_default_c_p()
 global image
 
 if c_p['camera_model'] == 'ThorlabsCam':
-    image = np.zeros((c_p['AOI'][1]-c_p['AOI'][0], c_p['AOI'][3]-c_p['AOI'][2], 1))
+    image = np.zeros((c_p['AOI'][1]-c_p['AOI'][0], c_p['AOI'][3]-c_p['AOI'][2], 1),dtype=np.uint8)
 else:
     image = np.zeros((672,512,1))
 
@@ -298,7 +295,7 @@ camera_thread = CameraThread(1, 'Thread-camera')
 camera_thread.start()
 print('Camera thread started')
 
-exp_duration = 10
+exp_duration = 5
 time.sleep(0.5)
 start = time.time()
 while time.time() - start < exp_duration:
