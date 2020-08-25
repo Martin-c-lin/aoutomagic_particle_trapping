@@ -155,7 +155,7 @@ def get_default_c_p(recording_path=None):
         'measurement_name':'', # Name of measurement to use when saving data.
         'experiment_progress':0, # number of experiments run
         'experiment_runtime':0, # How many seconds have the experiment been running
-        'activate_traps_one_by_one':True, # If true then the program will
+        'activate_traps_one_by_one':False, # If true then the program will
         # activate and fill traps one by one.
         'camera_model':'basler',
         'cell_width':32,  # Width of cells when dividing the frame into a grid
@@ -1430,9 +1430,9 @@ class ExperimentControlThread(threading.Thread):
 
         while c_p['program_running']: # Change to continue tracking?
             time.sleep(0.3)
-            # Look through the whole shedule, a list of dictionaries.
+            # Look through the whole schedule, a list of dictionaries.
 
-            if c_p['tracking_on']:
+            if c_p['tracking_on'] and c_p['experiment_progress'] < c_p['nbr_experiments']:
                 setup_dict = c_p['experiment_schedule'][c_p['experiment_progress']]
                 print('Next experiment is', setup_dict)
                 run_finished = False
@@ -1504,7 +1504,7 @@ class ExperimentControlThread(threading.Thread):
                        c_p['experiment_progress'] += 1
 
         c_p['return_z_home'] = True
-
+        print('I AM DONE NOW QUITTING!')
 
 def get_adjacency_matrix(nx, ny):
     '''
@@ -1588,7 +1588,7 @@ def path_search(filled_traps_locs, target_particle_location,
 
     trap_radii = 3
     for location in filled_traps_locs:
-        print(location)
+        print(location) # Why print here?
         x = location[0] / c_p['cell_width']
         y = location[1] / c_p['cell_width']
         distance_map = (X - x)**2 + (Y - y)**2
@@ -1681,7 +1681,7 @@ def update_c_p(update_dict, wait_for_completion=True):
     ok_parameters = ['use_LGO', 'LGO_order', 'xm', 'ym', 'zm', 'setpoint_temperature',
     'recording_duration', 'target_experiment_z', 'SLM_iterations',
     'temperature_output_on','activate_traps_one_by_one','need_T_stable',
-    'measurement_name']
+    'measurement_name','phasemask']
 
     requires_new_phasemask = ['use_LGO', 'LGO_order', 'xm', 'ym', 'zm', 'SLM_iterations']
 
@@ -1690,7 +1690,7 @@ def update_c_p(update_dict, wait_for_completion=True):
             try:
                 if key == 'xm' and min(update_dict[key]) > 1:
                     c_p[key] = pixels_to_SLM_locs(update_dict[key], 0)
-                    print('xm' ,update_dict[key])
+                    print('xm ' ,update_dict[key])
                 elif key == 'ym' and min(update_dict[key]) > 1:
                     c_p[key] = pixels_to_SLM_locs(update_dict[key], 1)
                     print('ym ',update_dict[key])
@@ -1718,29 +1718,33 @@ def update_c_p(update_dict, wait_for_completion=True):
         c_p['ym'] = c_p['ym'][:len(c_p['xm'])]
         print(' WARNING! xm and ym not the same length, cutting off ym!')
 
-    # update phasemask
-    for key in update_dict:
-        if key in requires_new_phasemask:
-            c_p['new_phasemask'] = True
+    # update phasemask. If there was an old one linked use it.
+    if 'phasemask' not in update_dict:
+        for key in update_dict:
+            if key in requires_new_phasemask:
+                c_p['new_phasemask'] = True
+    else:
+        # Manually change phasemask without SLM thread
+        c_p['phasemask_updated'] = True
+        SLM_loc_to_trap_loc(c_p['xm'], c_p['ym'])
 
     # Wait for new phasemask if user whishes this
     while c_p['new_phasemask'] and wait_for_completion:
         time.sleep(0.3)
 
     # Check if there is an old phasemask to be used.
-    if 'load_phasemask' in update_dict:
-        try:
-            data = np.load(update_dict['load_phasemask'])
-            c_p['phasemask'] = data['phasemask']
-            time.sleep(0.5)
-        except:
-            print('Could not load phasemask from ', update_dict['load_phasemask'])
+    # if 'load_phasemask' in update_dict:
+    #     try:
+    #         data = np.load(update_dict['load_phasemask'])
+    #         c_p['phasemask'] = data['phasemask']
+    #         time.sleep(0.5)
+    #     except:
+    #         print('Could not load phasemask from ', update_dict['load_phasemask'])
 
     # Await stable temperature
     while c_p['need_T_stable'] and not c_p['temperature_stable'] and\
         c_p['temperature_controller_connected']:
         time.sleep(0.3)
-
 
 def count_interior_particles(margin=30):
     '''

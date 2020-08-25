@@ -10,11 +10,12 @@ Created on Mon Jul 27 08:49:16 2020
 import pickle
 
 float_parameters = ['LGO_order', 'setpoint_temperature',
-                    'recording_duration', 'target_experiment_z',
-                    'SLM_iterations']
+                    'recording_duration', 'target_experiment_z',]
 
 bool_parameters = ['temperature_output_on', 'activate_traps_one_by_one',
                    'need_T_stable']
+int_parameters = ['SLM_iterations']
+
 bool_list = ['use_LGO']
 float_list = ['xm', 'ym', 'zm', 'ghost_traps_x', 'ghost_traps_y',
             'ghost_traps_z']
@@ -36,7 +37,7 @@ def LoadPhasemask(phasemaskDictPath):
     try:
         dict = pickle.load(file)
         file.close()
-        print(dict)
+        #print(dict)
         return dict['phasemask'], dict['xm'], dict['ym']
     except:
         print('Could not load data.')
@@ -99,9 +100,13 @@ def Line2KeyValue(line, current_dict):
         elif key in string_list:
             current_dict[key] = string_value[:-2]
             return key, string_value[:-2]
+        elif key in int_parameters:
+            current_dict[key] = int(string_value)
+            return key, int(string_value)
         elif key == 'phasemask':
-            current_dict['phasemask'], current_dict['xm'], current_dict['ym'] = LoadPhasemask(string_value[:-1])
-            return key, LoadPhasemask(string_value[:-1]) # last element is end of line
+            current_dict['phasemask'], current_dict['xm'], current_dict['ym'] = LoadPhasemask(string_value[:-1])# last element is end of line
+            print('loaded xm is ',  current_dict['xm'])
+            return key,  current_dict['phasemask']
     except:
         print('Warning, could not convert ',key,' value in ', string_value)
         return None, None
@@ -145,8 +150,8 @@ def ReadFileToExperimentList(filepath):
         if isinstance(key, int) and len(current_dict) > 0:
             dict_list.append(current_dict)
             current_dict = {}
-        else:
-            print('Could not read line', idx+1, ' into anything meaningfull.')
+        # else:
+        #     print('Could not read line', idx+1, ' into anything meaningfull.')
 
     # Add last dictionary if it has not yet been added,
     if len(current_dict) > 0:
