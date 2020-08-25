@@ -36,7 +36,7 @@ def find_closest(centers, target):
     return index, distance
 
 
-def set_exposure(cam,exposure_time):
+def set_exposure(cam, exposure_time):
     exposure_time = float(exposure_time+1e-4)
     print(number_to_millisecond(exposure_time))
     cam.set_defaults(exposure_time=number_to_millisecond(exposure_time))
@@ -104,4 +104,4 @@ def find_exposure_time(cam,targetIntensity=100,margin=5):
               No really suitable exposure setting found")
     # Update the exposure time of the camera and return the target exposure
     cam.set_defaults(exposure_time=number_to_millisecond(midExposure))
-    return number_to_millisecond(midExposure)
+    return midExposure#number_to_millisecond(midExposure)

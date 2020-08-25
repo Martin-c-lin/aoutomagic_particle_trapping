@@ -86,7 +86,6 @@ def get_default_c_p(recording_path=None):
         'movement_threshold': 30,
         'nbr_experiments':1,
         'framerate': 500,
-        'recording': False,
         'tracking_on': False,
         'setpoint_temperature': 25,
         'current_temperature': 25,
@@ -1765,8 +1764,6 @@ def set_AOI(half_image_width=50, left=None, right=None, up=None, down=None):
     global c_p
 
     # Do not want motors to be moving when changing AOI!
-    # c_p['motor_locks'][0].acquire()
-    # c_p['motor_locks'][1].acquire()
     # If exact values have been provided for all the corners change AOI
     if c_p['camera_model'] == 'ThorlabsCam':
         if left is not None and right is not None and up is not None and down is not None:
@@ -1798,8 +1795,6 @@ def set_AOI(half_image_width=50, left=None, right=None, up=None, down=None):
 
     # Give motor threads time to catch up
     time.sleep(0.5)
-    # c_p['motor_locks'][0].release()
-    # c_p['motor_locks'][1].release()
 
 
 def find_focus():
