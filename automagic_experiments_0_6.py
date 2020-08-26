@@ -1220,10 +1220,10 @@ class CameraThread(threading.Thread):
 
           start = time.time()
 
-          # Create an array to store the images which have been captured in
-          if not video_created:
-              video, experiment_info_name, exp_info_params = self.create_video_writer()
-              video_created = True
+          # # Create an array to store the images which have been captured in
+          # if not video_created:
+          #     video, experiment_info_name, exp_info_params = self.create_video_writer()
+          #     video_created = True
           # Start continously capturing images now that the camera parameters have been set
           while c_p['program_running']\
                and not c_p['new_AOI_camera']:
@@ -1233,6 +1233,10 @@ class CameraThread(threading.Thread):
                   image = np.flip(img.GetArray(),axis=(0,1)) # Testing to flip this guy
                   img.Release()
                   if c_p['recording']:
+                      # Create an array to store the images which have been captured in
+                      if not video_created:
+                            video, experiment_info_name, exp_info_params = self.create_video_writer()
+                            video_created = True
                       video.write(image)
                   # Capture an image and update the image count
                   image_count = image_count+1
