@@ -549,6 +549,11 @@ class UserInterface:
         self.mini_image = mini_image.astype('uint8')
 
     def create_buttons(self,top=None):
+        '''
+        This function generates all the buttons for the interface along with
+        the other control elementsn such as entry boxes.
+        '''
+        global c_p
         if top is None:
             top = self.window
 
@@ -560,11 +565,14 @@ class UserInterface:
                 yield start + (distance * index)
                 index += 1
 
-        global c_p
+        def home_z_command():
+            c_p['return_z_home'] = not c_p['return_z_home']
 
         # TODO add home z button
         # TODO: Check if we can change colors of buttons by making buttons part of
         # object.
+
+
 
         up_button = tkinter.Button(top, text='Move up',
                                    command=partial(move_button, 0))
@@ -578,6 +586,8 @@ class UserInterface:
                                              command=start_record)
         stop_record_button = tkinter.Button(top, text='Stop recording',
                                             command=stop_record)
+        self.home_z_button = tkinter.Button(top, text='Toggle home z',
+                                            command=home_z_command)
         toggle_bright_particle_button = tkinter.Button(
             top, text='Toggle particle brightness',
             command=toggle_bright_particle)
@@ -697,6 +707,7 @@ class UserInterface:
         self.toggle_motorX_button.place(x=x_position_2, y=y_position_2.__next__())
         self.toggle_motorY_button.place(x=x_position_2, y=y_position_2.__next__())
         self.toggle_piezo_button.place(x=x_position_2, y=y_position_2.__next__())
+        self.home_z_button.place(x=x_position_2, y=y_position_2.__next__())
 
     def create_SLM_window(self, _class):
         try:
@@ -763,6 +774,12 @@ class UserInterface:
         piezo_connected = 'Disconnect' if c_p['connect_motor'][2] else 'Connect'
         self.toggle_piezo_button.config(text=piezo_connected + ' piezo motor')
 
+    def update_home_button(self):
+        if c_p['return_z_home']:
+            self.home_z_button.config(text='Z is homing. Press to stop')
+        else:
+            self.home_z_button.config(text='Press to home z')
+
     def create_indicators(self):
         global c_p
         # Update if recording is turned on or not
@@ -808,6 +825,7 @@ class UserInterface:
         self.position_label.config(text=self.get_position_info())
 
         self.update_motor_buttons()
+        self.update_home_button()
 
     def resize_display_image(self, img):
         img_size = np.shape(img)
