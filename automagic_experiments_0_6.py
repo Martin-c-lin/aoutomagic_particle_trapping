@@ -1132,25 +1132,24 @@ class CameraThread(threading.Thread):
 
           start = time.time()
 
-          # Create an array to store the images which have been captured in
-          if not video_created:
-              video, experiment_info_name, exp_info_params = self.create_video_writer()
-              video_created = True
           # Start continously capturin images now that the camera parameters have been set
           while c_p['program_running']\
                and not c_p['new_AOI_camera']:
               self.cam.wait_for_frame(timeout=None)
               if c_p['recording']:
+                  # Create an array to store the images which have been captured in
+                  if not video_created:
+                      video, experiment_info_name, exp_info_params = self.create_video_writer()
+                      video_created = True
                   video.write(image)
               # Capture an image and update the image count
               image_count = image_count+1
               image[:][:][:] = self.cam.latest_frame()
 
-
-          video.release()
-
-          del video
-          video_created = False
+          if video_created:
+              video.release()
+              del video
+              video_created = False
           # Close the livefeed and calculate the fps of the captures
           end = time.time()
           self.cam.stop_live_video()
@@ -1220,10 +1219,6 @@ class CameraThread(threading.Thread):
 
           start = time.time()
 
-          # # Create an array to store the images which have been captured in
-          # if not video_created:
-          #     video, experiment_info_name, exp_info_params = self.create_video_writer()
-          #     video_created = True
           # Start continously capturing images now that the camera parameters have been set
           while c_p['program_running']\
                and not c_p['new_AOI_camera']:
@@ -1241,10 +1236,12 @@ class CameraThread(threading.Thread):
                   # Capture an image and update the image count
                   image_count = image_count+1
 
-          video.release()
+
           self.cam.StopGrabbing()
-          del video
-          video_created = False
+          if video_created:
+              video.release()
+              del video
+              video_created = False
           # Close the livefeed and calculate the fps of the captures
           end = time.time()
 
