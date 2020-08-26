@@ -78,7 +78,7 @@ def get_default_c_p(recording_path=None):
         # not
         'recording': False,  # True if recording is on
         'AOI': [0, 672, 0, 512], # Default for basler camera [0,1200,0,1000] TC
-        'new_AOI_camera': False,
+        'new_settings_camera': False,
         'new_AOI_display': False,
         'new_phasemask': False,
         'phasemask_updated': False,  # True if the phasemask is to be udpated
@@ -452,7 +452,7 @@ class UserInterface:
         self.mini_image = np.zeros((200,240,3))
         # Button that lets the user take a snapshot
         self.btn_snapshot = tkinter.Button(
-            window, text="Snapshot", command=self.snapshot)
+            window, text="Snapshot", command=snapshot)
         self.btn_snapshot.place(x=1300, y=0)
         self.create_buttons(self.window)
         self.window.geometry('1700x1000')
@@ -634,7 +634,7 @@ class UserInterface:
                     if 59 < exposure_time < 4e5: # If you need more than that you are
                         c_p['exposure_time'] = exposure_time
                         print("Exposure time set to ", exposure_time)
-                        c_p['new_AOI_camera'] = True
+                        c_p['new_settings_camera'] = True
                     else:
                         print('Exposure time out of bounds!')
                 except:
@@ -716,13 +716,6 @@ class UserInterface:
         except:
             self.new = tkinter.Toplevel(self.window)
             self.SLM_Window = _class(self.new)
-
-    def snapshot(self):
-        global image
-        global c_p
-        cv2.imwrite(c_p['recording_path'] + "/frame-" +\
-                    time.strftime("%d-%m-%Y-%H-%M-%S") +\
-                    ".jpg", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
 
     def get_temperature_info(self):
         global c_p
@@ -1119,7 +1112,7 @@ class CameraThread(threading.Thread):
               right=c_p['AOI'][1],
               top=c_p['AOI'][2],
               bot=c_p['AOI'][3])
-          c_p['new_AOI_camera'] = False
+          c_p['new_settings_camera'] = False
           # Grab one example image
           global image
           image = self.cam.grab_image(n_frames=1)
@@ -1134,7 +1127,7 @@ class CameraThread(threading.Thread):
 
           # Start continously capturin images now that the camera parameters have been set
           while c_p['program_running']\
-               and not c_p['new_AOI_camera']:
+               and not c_p['new_settings_camera']:
               self.cam.wait_for_frame(timeout=None)
               if c_p['recording']:
                   # Create an array to store the images which have been captured in
@@ -1146,10 +1139,6 @@ class CameraThread(threading.Thread):
               image_count = image_count+1
               image[:][:][:] = self.cam.latest_frame()
 
-          if video_created:
-              video.release()
-              del video
-              video_created = False
           # Close the livefeed and calculate the fps of the captures
           end = time.time()
           self.cam.stop_live_video()
@@ -1157,11 +1146,16 @@ class CameraThread(threading.Thread):
           print('Capture sequence finished', image_count,
                'Images captured in ', end-start, 'seconds. \n FPS is ',
                fps)
-          # Save the experiment data in a pickled dict.
-          outfile = open(experiment_info_name, 'wb')
-          exp_info_params['fps'] = fps
-          pickle.dump(exp_info_params, outfile)
-          outfile.close()
+
+          if video_created:
+            video.release()
+            del video
+            video_created = False
+            # Save the experiment data in a pickled dict.
+            outfile = open(experiment_info_name, 'wb')
+            exp_info_params['fps'] = fps
+            pickle.dump(exp_info_params, outfile)
+            outfile.close()
 
    def set_basler_AOI(self):
        '''
@@ -1203,7 +1197,7 @@ class CameraThread(threading.Thread):
           # Set defaults for camera, aknowledge that this has been done
 
           self.set_basler_AOI()
-          c_p['new_AOI_camera'] = False
+          c_p['new_settings_camera'] = False
           try:
               self.cam.ExposureTime = c_p['exposure_time']
               c_p['framerate'] = self.cam.ResultingFrameRate.GetValue()
@@ -1221,7 +1215,7 @@ class CameraThread(threading.Thread):
 
           # Start continously capturing images now that the camera parameters have been set
           while c_p['program_running']\
-               and not c_p['new_AOI_camera']:
+               and not c_p['new_settings_camera']:
 
                with self.cam.RetrieveResult(2000) as result:
                   img.AttachGrabResultBuffer(result)
@@ -1238,10 +1232,7 @@ class CameraThread(threading.Thread):
 
 
           self.cam.StopGrabbing()
-          if video_created:
-              video.release()
-              del video
-              video_created = False
+
           # Close the livefeed and calculate the fps of the captures
           end = time.time()
 
@@ -1251,11 +1242,15 @@ class CameraThread(threading.Thread):
                'Images captured in ', end-start, 'seconds. \n FPS is ',
                fps)
 
-          # Save the experiment data in a pickled dict.
-          outfile = open(experiment_info_name, 'wb')
-          exp_info_params['fps'] = fps
-          pickle.dump(exp_info_params, outfile)
-          outfile.close()
+          if video_created:
+              video.release()
+              del video
+              video_created = False
+              # Save the experiment data in a pickled dict.
+              outfile = open(experiment_info_name, 'wb')
+              exp_info_params['fps'] = fps
+              pickle.dump(exp_info_params, outfile)
+              outfile.close()
 
    def run(self):
        if c_p['camera_model'] == 'ThorlabsCam':
@@ -1372,9 +1367,15 @@ class ExperimentControlThread(threading.Thread):
         returns the amount of time remaining of the experiment.
         '''
         start = time.time()
+        now = datetime.now()
+        time_stamp = str(now.hour) + '-' + str(now.minute)
 
-        c_p['recording'] = True
+        # Taking snapshot before zooming in so user can see if there are
+        # particles in the background which may interfere with measurement.
+
+        snapshot(c_p['measurement_name']+'_pre'+time_stamp)
         zoom_in()
+        c_p['recording'] = True
         patiance = 50
         patiance_counter = 0
         while time.time() <= start + duration and c_p['tracking_on']:
@@ -1383,14 +1384,14 @@ class ExperimentControlThread(threading.Thread):
             if all_filled:
                 patiance_counter = 0
                 time.sleep(1)
-                #print('Experiment is running', self.check_exp_conditions())
                 c_p['experiment_runtime'] = np.round(time.time() - start)
             else:
                 patiance_counter += 1
             if patiance_counter > patiance:
                 break
-        zoom_out()
         c_p['recording'] = False
+        zoom_out()
+        snapshot(c_p['measurement_name']+'_after'+time_stamp)
         if time.time() >= start + duration:
             return 0
         return start + duration - time.time()
@@ -1607,7 +1608,6 @@ def path_search(filled_traps_locs, target_particle_location,
 
     trap_radii = 3
     for location in filled_traps_locs:
-        print(location) # Why print here?
         x = location[0] / c_p['cell_width']
         y = location[1] / c_p['cell_width']
         distance_map = (X - x)**2 + (Y - y)**2
@@ -1810,7 +1810,7 @@ def set_AOI(half_image_width=50, left=None, right=None, up=None, down=None):
     print('Setting AOI to ',c_p['AOI'])
 
     # Inform the camera and display thread about the updated AOI
-    c_p['new_AOI_camera'] = True
+    c_p['new_settings_camera'] = True
     c_p['new_AOI_display'] = True
 
     # Update trap relative position
@@ -2041,6 +2041,23 @@ def stop_record():
     c_p['recording']= False
     print('Recording is off')
 
+
+def snapshot(label=None):
+    """
+    Saves the latest frame captured by the camera into a jpg image.
+    Will label it with date and time if no label is provided. Image is
+    put into same folder as videos recorded.
+    """
+    global image
+    global c_p
+    if label == None:
+        image_name = c_p['recording_path'] + "/frame-" +\
+                    time.strftime("%d-%m-%Y-%H-%M-%S") +\
+                    ".jpg"
+    else:
+        image_name = c_p['recording_path'] + '/' + label + '.jpg'
+    cv2.imwrite(image_name, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+    print('Took a snapshot of the experiment.')
 
 def toggle_temperature_output():
     '''
