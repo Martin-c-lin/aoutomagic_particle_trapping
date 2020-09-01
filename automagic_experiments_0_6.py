@@ -572,8 +572,6 @@ class UserInterface:
         # TODO: Check if we can change colors of buttons by making buttons part of
         # object.
 
-
-
         up_button = tkinter.Button(top, text='Move up',
                                    command=partial(move_button, 0))
         down_button = tkinter.Button(top, text='Move down',

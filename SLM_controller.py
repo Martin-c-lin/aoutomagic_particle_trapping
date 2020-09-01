@@ -8,8 +8,10 @@ from functools import partial
 import PIL.Image, PIL.ImageTk
 from tkinter.ttk import *
 import SLM
-
-
+from read_dict_from_file import ReadFileToExperimentList
+from tkinter.filedialog import askopenfilename
+# TODO: Put some of the experiment parameters, such as slm_y_center, in a separate
+# file which both this module and automagic experiments have access to.
 def get_default_c_p(
     SLM_iterations = 2,
     phasemask_width = 1080,
@@ -74,6 +76,26 @@ def start_threads():
     print('SLM thread started')
 
 
+def update_xm_ym():
+    global c_p
+    print('Updating')
+    c_p['xm'], c_p['ym'] = SLM.get_xm_ym_rect(
+            nbr_rows=c_p['nbr_SLM_rows'],
+            nbr_columns=c_p['nbr_SLM_columns'],
+            dx=c_p['dx'],
+            dy=c_p['dy'],
+            d0x=c_p['d0x'],
+            d0y=c_p['d0y'])
+
+    # If units are pixels, then translate to "SLM coordinates"
+    if min(c_p['xm']) >= 1:
+        print(c_p['xm'])
+        c_p['xm'] = pixels_to_SLM_locs(c_p['xm'], 0)
+    if min(c_p['ym']) >= 1:
+        c_p['ym'] = pixels_to_SLM_locs(c_p['ym'], 1)
+    SLM_loc_to_trap_loc(c_p['xm'], c_p['ym'])
+
+
 class CreateSLMThread(threading.Thread):
     '''
     Thread for calculating the new phasemasks in the background.
@@ -83,29 +105,11 @@ class CreateSLMThread(threading.Thread):
         self.threadID = threadID
         self.name = name
         self.setDaemon(True)
-        self.update_xm_ym()
-
-    def update_xm_ym(self):
-        global c_p
-        c_p['xm'], c_p['ym'] = SLM.get_xm_ym_rect(
-                nbr_rows=c_p['nbr_SLM_rows'],
-                nbr_columns=c_p['nbr_SLM_columns'],
-                dx=c_p['dx'],
-                dy=c_p['dy'],
-                d0x=c_p['d0x'],
-                d0y=c_p['d0y'])
-
-        # If units are pixels, then translate to "SLM coordinates"
-        if min(c_p['xm']) >= 1:
-            print(c_p['xm'])
-            c_p['xm'] = pixels_to_SLM_locs(c_p['xm'], 0)
-        if min(c_p['ym']) >= 1:
-            c_p['ym'] = pixels_to_SLM_locs(c_p['ym'], 1)
-        SLM_loc_to_trap_loc(c_p['xm'], c_p['ym'])
+        update_xm_ym()
 
     def run(self):
         global c_p
-        self.update_xm_ym()
+        update_xm_ym()
         c_p['zm'] = np.ones(len(c_p['xm'])) * c_p['d0z']
 
         Delta, N, M = SLM.get_delta(xm=c_p['xm'],
@@ -119,7 +123,6 @@ class CreateSLMThread(threading.Thread):
         while c_p['experiment_running']:
             if c_p['new_phasemask']:
                 # Calcualte new delta and phasemask
-                self.update_xm_ym()
                 c_p['zm'] = np.ones(len(c_p['xm'])) * c_p['d0z']
                 Delta,N,M = SLM.get_delta(xm=c_p['xm'],
                     ym=c_p['ym'],
@@ -249,6 +252,20 @@ class TkinterDisplay:
         self.LGO_on_button.place(x=x_pos, y=y_pos)
         self.LGO_off_button.place(x=x_pos+80, y=y_pos)
 
+    def read_positions_from_file(self):
+        global c_p
+        filepath = askopenfilename()
+        # TODO make it so that we can handle exceptions from the file better here.
+        # Bring up a confirmation menu for the schedule perhaps?
+        experiment_list = ReadFileToExperimentList(filepath)
+        if experiment_list is not None and len(experiment_list) > 0:
+            print(experiment_list[0])
+            for key in experiment_list[0]:
+                # TODO: Fix some problems here
+                c_p[key] = experiment_list[0][key]
+        else:
+            print('Invalid or empty file.')
+
     def create_buttons(self):
         def get_y_separation(start=5,distance=40):
             index = 0
@@ -279,10 +296,11 @@ class TkinterDisplay:
             except:
                 print('Cannot perform conversion')
                 return None
-        def update_from_entry(tkinter_entry,key,type='int',bounds=[-np.inf,np.inf],new_mask=False,scale=1):
+        def update_from_entry(tkinter_entry,key,type='int',bounds=[-np.inf,np.inf], new_mask=False,scale=1):
             entry = get_entry(tkinter_entry,type)
             if entry is not None and entry>bounds[0] and entry<bounds[1]:
                 c_p[key] = entry*scale
+                update_xm_ym()
                 c_p['new_phasemask'] = new_mask
             else:
                 print('Value out of bounds')
@@ -298,20 +316,23 @@ class TkinterDisplay:
         set_d0z = lambda : update_from_entry(d0z_entry, type='float', key='d0z', bounds=[-200, 200], scale=1e-10)
         set_LGO_order = lambda : update_from_entry(LGO_order_entry, type='int', key='LGO_order', bounds=[-200, 200], scale=1)
 
-        SLM_Iterations_button = tkinter.Button(self.window, text ='Set SLM iterations', command = set_iterations)
-        set_dx_button = tkinter.Button(self.window, text ='Set particle separation -x ', command = set_dx)
-        set_dy_button = tkinter.Button(self.window, text ='Set particle separation -y ', command = set_dy)
+        SLM_Iterations_button = tkinter.Button(self.window, text ='Set SLM iterations', command=set_iterations)
+        set_dx_button = tkinter.Button(self.window, text='Set particle separation -x ', command=set_dx)
+        set_dy_button = tkinter.Button(self.window, text='Set particle separation -y ', command=set_dy)
 
-        SLM_rows_button = tkinter.Button(self.window, text ='Set SLM rows', command = set_SLM_rows)
-        SLM_columns_button = tkinter.Button(self.window, text ='Set SLM columns', command = set_SLM_columns)
-        set_d0x_button = tkinter.Button(self.window, text ='Set d0x', command = set_d0x)
-        set_d0y_button = tkinter.Button(self.window, text ='Set d0y', command = set_d0y)
-        set_d0z_button = tkinter.Button(self.window, text ='Set d0z', command = set_d0z)
+        SLM_rows_button = tkinter.Button(self.window, text='Set SLM rows', command=set_SLM_rows)
+        SLM_columns_button = tkinter.Button(self.window, text='Set SLM columns', command=set_SLM_columns)
+        set_d0x_button = tkinter.Button(self.window, text='Set d0x', command=set_d0x)
+        set_d0y_button = tkinter.Button(self.window, text='Set d0y', command=set_d0y)
+        set_d0z_button = tkinter.Button(self.window, text='Set d0z', command=set_d0z)
 
 
-        set_LGO_order_button = tkinter.Button(self.window, text ='Set LGO order', command = set_LGO_order)
+        set_LGO_order_button = tkinter.Button(self.window, text='Set LGO order', command=set_LGO_order)
 
-        recalculate_mask_button = tkinter.Button(self.window, text ='Recalculate mask', command = recalculate_mask)
+        recalculate_mask_button = tkinter.Button(self.window, text='Recalculate mask', command=recalculate_mask)
+
+        read_positions_button = tkinter.Button(self.window, text='load positions from file', command=self.read_positions_from_file)
+
         y_position = get_y_separation()
         y_position_2 = get_y_separation() # for second column
 
@@ -352,6 +373,8 @@ class TkinterDisplay:
         self.create_algorithm_selection(x_position_2, y_position_2.__next__())
         self.create_LGO_selection(x_position_2, y_position_2.__next__())
 
+        read_positions_button.place(x=x_position_2,y=y_position_2.__next__())
+
     def create_indicators(self):
             global c_p
             position_text = 'Current trap separation is: ' + str(c_p['trap_separation'])
@@ -369,7 +392,7 @@ class TkinterDisplay:
         '''
         Helper function for updating on-screen indicators
         '''
-        position_text = 'Current dx is: ' + str(c_p['dx']*1e6)+'  Current dy is: ' + str(c_p['dy']*1e6)
+        position_text = 'Current dx is: ' + str(c_p['dx'])+' px. Current dy is: ' + str(c_p['dy']) + ' px'
         position_text += '\n Number of iterations set to: ' +str(c_p['SLM_iterations'])
         if c_p['SLM_algorithm'] == 'GS':
             position_text += '\n Using Grechbgerg-Saxton algorithm'
@@ -377,8 +400,8 @@ class TkinterDisplay:
             position_text += '\n Using Weighted Grechbgerg-Saxton algorithm'
         self.position_label.config(text=position_text)
 
-        setup_text = 'xms are : ' + str(c_p['traps_absolute_pos'][0])
-        setup_text += '\n yms are : ' + str(c_p['traps_absolute_pos'][1]) #c_p['ym'])
+        setup_text = 'x-positions are : ' + str(c_p['traps_absolute_pos'][0])
+        setup_text += '\n y-positions are : ' + str(c_p['traps_absolute_pos'][1]) #c_p['ym'])
         setup_text += '\n LGO order set to: ' +str(c_p['LGO_order'])
         self.info_label.config(text=setup_text)
 
