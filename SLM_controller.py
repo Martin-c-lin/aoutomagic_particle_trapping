@@ -78,7 +78,6 @@ def start_threads():
 
 def update_xm_ym():
     global c_p
-    print('Updating')
     c_p['xm'], c_p['ym'] = SLM.get_xm_ym_rect(
             nbr_rows=c_p['nbr_SLM_rows'],
             nbr_columns=c_p['nbr_SLM_columns'],
@@ -86,7 +85,11 @@ def update_xm_ym():
             dy=c_p['dy'],
             d0x=c_p['d0x'],
             d0y=c_p['d0y'])
+    update_trap_locs()
 
+
+def update_trap_locs():
+    global c_p
     # If units are pixels, then translate to "SLM coordinates"
     if min(c_p['xm']) >= 1:
         print(c_p['xm'])
@@ -265,6 +268,7 @@ class TkinterDisplay:
                 c_p[key] = experiment_list[0][key]
         else:
             print('Invalid or empty file.')
+        update_trap_locs()
 
     def create_buttons(self):
         def get_y_separation(start=5,distance=40):
