@@ -1044,7 +1044,7 @@ class CameraThread(threading.Thread):
           # Get a thorlabs camera
           self.cam = TC.get_camera()
           self.cam.set_defaults(left=c_p['AOI'][0], right=c_p['AOI'][1], top=c_p['AOI'][2], bot=c_p['AOI'][3], n_frames=1)
-          exposure_time = TC.find_exposure_time(cam, targetIntensity=70) # automagically finds a decent exposure time
+          exposure_time = TC.find_exposure_time(self.cam, targetIntensity=70) # automagically finds a decent exposure time
           print('Exposure time = ', exposure_time)
       else:
           # Get a basler camera
@@ -2252,7 +2252,9 @@ def move_particles_slowly(last_d=30e-6):
 ############### Main script starts here ####################################
 c_p = get_default_c_p()
 # Create camera and set defaults
+c_p['camera_model'] = 'ThorlabsCam'
 global image
+
 if c_p['camera_model'] == 'ThorlabsCam':
     image = np.zeros((c_p['AOI'][1]-c_p['AOI'][0], c_p['AOI'][3]-c_p['AOI'][2], 1))
 else:

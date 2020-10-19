@@ -256,6 +256,9 @@ class TkinterDisplay:
         self.LGO_off_button.place(x=x_pos+80, y=y_pos)
 
     def read_positions_from_file(self):
+        '''
+        Reads xm, ym from a .txt file and puts them in ...
+        '''
         global c_p
         filepath = askopenfilename()
         # TODO make it so that we can handle exceptions from the file better here.

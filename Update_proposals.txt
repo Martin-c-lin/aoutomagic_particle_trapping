@@ -1,0 +1,8 @@
+Try to make a single API on which one can build other applications.
+Have c_p as input to the different threads and put the threads in separate files.
+EX - temperature thread in temperature_controller file.
+
+Make it possible to build different applications on using these basic building blocks.
+
+Consider splitting c_p into different subdictionaries, one per thread.
+Then we would have for instance c_p_temperature(),c_p_camera etc
